@@ -1,5 +1,6 @@
 from tkinter import *
 from tkinter import ttk
+from tkinter import font
 
 from matplotlib.backends.backend_tkagg import (
     FigureCanvasTkAgg, NavigationToolbar2Tk)
@@ -9,109 +10,77 @@ from matplotlib.figure import Figure
 
 import numpy as np
 
+from PIL import Image, ImageTk
+
+root = Tk()
+
+default_font = font.nametofont("TkDefaultFont")
+default_font.configure(size=12)
+bu_font = default_font.copy() # bold underline
+bu_font.configure(underline=True, weight="bold")
+u_font = default_font.copy() # underline
+u_font.configure(underline=True)
+b_font = default_font.copy() # bold
+b_font.configure(weight="bold")
+
+
 class GUI:
-    def __init__(self, root):
-        self.root = root
-        self.root.geometry("1200x800")
-        self.root.title("super cool digital communications thing +_+")
-        self.root.columnconfigure(0, weight=1)
-        self.root.rowconfigure(0, weight=1)
+    def __init__(self):
+      self.window_init()
 
-        main_frame = ttk.Frame(self.root, padding=3)
-        main_frame.grid(row=0, column=0, sticky="nsew")
+      main_frame = ttk.Frame(root, padding=3)
+      main_frame.grid(row=0, column=0, sticky="nsew")
+      main_frame.rowconfigure([0,1], weight=1, uniform="rows")
 
-        ##### Left titles #####
-        ttk.Label(main_frame, text="TX", foreground="white", background="red", anchor="center") \
-           .grid(row=0, column=0, sticky="nsew")
-        ttk.Label(main_frame, text="RX", foreground="white", background="blue", anchor="center") \
-           .grid(row=1, column=0, sticky="nsew")
+      # red / blue titles
+      ttk.Label(main_frame, text="TX", foreground="white", background="red", anchor="center") \
+          .grid(row=1, column=0, sticky="nsew")
+      ttk.Label(main_frame, text="RX", foreground="white", background="blue", anchor="center") \
+          .grid(row=0, column=0, sticky="nsew")
+      main_frame.columnconfigure(0, weight=0, minsize=50)
 
-        ##### TX graphs #####
-        tx_graphs = ttk.Frame(main_frame, relief="ridge", padding=10)
-        tx_graphs      .grid(row=0, column=1, sticky="nsew")
+      # graphs
+      RXGraphs(main_frame).grid(row=0, column=1, sticky="nsew")
+      TXGraphs(main_frame).grid(row=1, column=1, sticky="nsew")
+      main_frame.columnconfigure(1, weight=2)
 
-        ttk.Label(tx_graphs, text="hello!!!!").pack(side="top", fill="x")
-        ttk.Label(tx_graphs, text="hiii!!!!") .pack(side="top", fill="x")
+      # controls
+      RXControl(main_frame).grid(row=0, column=2, sticky="nsew")
+      TXControl(main_frame).grid(row=1, column=2, sticky="nsew")
+      main_frame.columnconfigure(2, weight=1)
 
-        ##### TX connection #####
-        tx_conn = ttk.Frame(main_frame, relief="ridge", padding=10)
-        tx_conn      .grid(row=0, column=2, sticky="nsew")
+      ttk.Separator(main_frame, orient=VERTICAL).grid(row=0, column=3, sticky="nsew", rowspan=2)
+      main_frame.columnconfigure(3, weight=0)
 
-        ##### RX graphs #####
-        rx_graphs = ttk.Frame(main_frame, relief="ridge", padding=10)
-        rx_graphs      .grid(row=1, column=1, sticky="nsew")
+      CommsControl(main_frame).grid(row=0, column=4, sticky="nsew", rowspan=2)
+      main_frame.columnconfigure(4, weight=1)
+      
+      for child in main_frame.winfo_children():
+        child.grid_configure(padx=4, pady=4)
 
-        plots = ScrollablePlots(rx_graphs)
-        plots.grid(row=0, column=0, sticky="nsew")
-        plots.add_plot()
-        plots.add_plot()
-        plots.add_plot()
+    ################ UTILS ##############
+    def window_init(self):
+      root.geometry("1200x800")
+      root.title("super cool digital communications thing +_+")
+      root.columnconfigure(0, weight=1)
+      root.rowconfigure(0, weight=1)
 
-        rx_graphs.rowconfigure(0, weight=1)
-        rx_graphs.columnconfigure(0, weight=1)
-
-        ##### RX connection #####
-        rx_conn = ttk.Frame(main_frame, relief="ridge", padding=10)
-        rx_conn      .grid(row=1, column=2, sticky="nsew")
-
-        ####### Right area ########
-        ttk.Separator(main_frame, orient=VERTICAL).grid(row=0, column=3, sticky="nsew", rowspan=2)
-        
-        command_section = ttk.Frame(main_frame, relief="ridge", padding=10)
-        command_section      .grid(row=0, column=4, sticky="nsew", rowspan=2)
-
-        ##########################
-
-        main_frame.rowconfigure([0,1], weight=1, uniform="rows")
-
-        main_frame.columnconfigure(0, weight=0, minsize=50)
-        main_frame.columnconfigure(1, weight=2)
-        main_frame.columnconfigure(2, weight=1)
-        main_frame.columnconfigure(3, weight=0)
-        main_frame.columnconfigure(4, weight=1)
-
-        for child in main_frame.winfo_children():
-          child.grid_configure(padx=4, pady=4)
-
-        #self.ui_basic_rx()
-
-    def mainloop(self):
-        return self.root.mainloop()
-
+    ############### CALLBACKS ##############
     def rx_button(self, *args):
-        self.data_text.set("blub")
-        print("rx")
+      self.data_text.set("blub")
+      print("rx")
 
-    def ui_basic_rx(self):
-        # | data: | `data_text` |
-        result_frame = ttk.Frame(self.main_frame).grid(row=0, column=0)
-        self.data_text = StringVar()
-        ttk.Label(result_frame, text="Data: ").grid(row=0, column=0)
-        ttk.Label(result_frame, textvariable=self.data_text).grid(row=0, column=1)
 
-        # [ RX ]
-        ttk.Button(self.main_frame, text="RX", command=self.rx_button).grid(row=1, column=0)
+class ResizingFrame(ttk.Frame):
+  def __init__(self, parent):
+    super().__init__(parent)
 
-        self.main_frame.columnconfigure(0, weight=1)
-        self.main_frame.rowconfigure(0, weight=3)
-        self.main_frame.rowconfigure(1, weight=1)
-        for child in self.main_frame.winfo_children(): 
-            child.grid_configure(padx=5, pady=5)
-    
-    def ui_matplot(self, parent):
-        fig = Figure(figsize=(5, 4), dpi=100)
-        t = np.arange(0, 3, .01)
-        fig.add_subplot(111).plot(t, 2 * np.sin(2 * np.pi * t))
+    self.rowconfigure(0, weight=1)
+    self.columnconfigure(0, weight=1)
 
-        canvas = FigureCanvasTkAgg(fig, master=parent)  # A tk.DrawingArea.
-        canvas.draw()
-        canvas.get_tk_widget().pack(side=TOP, fill=BOTH, expand=1)
 
-        toolbar = NavigationToolbar2Tk(canvas, parent)
-        toolbar.update()
-        canvas.get_tk_widget().pack(side=TOP, fill=BOTH, expand=1)
-
-class ScrollablePlots(Frame):
+# large w/ scrollbar section to hold the graphs
+class HScrollable(ResizingFrame):
   def __init__(self, parent):
     super().__init__(parent)
     
@@ -124,17 +93,130 @@ class ScrollablePlots(Frame):
     self.scrollbar.pack(side="bottom", fill="x")
 
     # where graphs go
-    self.plot_frame = Frame(self.canvas)
-    self.canvas_window = self.canvas.create_window((0,0), window=self.plot_frame, anchor="nw")
+    self.main_frame = Frame(self.canvas)
+    self.canvas_window = self.canvas.create_window((0,0), window=self.main_frame, anchor="nw")
 
     # update canvas when plot_frame changes size
-    self.plot_frame.bind("<Configure>", self._update_scrollregion)
+    self.main_frame.bind("<Configure>", self._update_scrollregion)
 
   def _update_scrollregion(self, event=None):
     self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
-  def add_plot(self):
-    Label(self.plot_frame, text="hiii"*100).pack(side="left")
+class RXGraphs(HScrollable):
+  def __init__(self, parent):
+    super().__init__(parent)
+
+    self.config(relief="ridge", padding=(10,10,10,10))
+
+    ttk.Label(self.main_frame, text="I/Q constelations").grid(sticky="w")
+    ttk.Label(self.main_frame, text="FFT").grid(sticky="w")
+    ttk.Label(self.main_frame, text="Sync").grid(sticky="w")
+    ttk.Label(self.main_frame, text="USB").grid(sticky="w")
+
+class TXGraphs(HScrollable):
+  def __init__(self, parent):
+    super().__init__(parent)
+
+    self.config(relief="ridge", padding=(10,10,10,10))
+
+    ttk.Label(self.main_frame, text="I/Q constelations").grid(sticky="w")
+    ttk.Label(self.main_frame, text="FFT").grid(sticky="w")
+    ttk.Label(self.main_frame, text="hello!!!!", font=bu_font).grid(sticky="w")
+    ttk.Label(self.main_frame, text="hiii!!!!").grid(sticky="w")
+
+class RXControl(ResizingFrame):
+  def __init__(self, parent):
+    super().__init__(parent)
+
+    self.config(relief="ridge", padding=(10,10,10,10))
+
+    ttk.Label(self, text="Reciever control (PlutoSDR)", font=bu_font) \
+       .pack(anchor="w", pady=(0,10))
+
+    # live rx
+    b_live_rx = BooleanVar(value=False)
+    ttk.Checkbutton(self, text="Live Receive", variable=b_live_rx, command=lambda : print(b_live_rx.get())).pack(anchor="w")
+
+    # single rx
+    ttk.Button(self, text="Single Receive", command=lambda : print("single RX")).pack(anchor="w")
+
+    ttk.Separator(self, orient=HORIZONTAL).pack(fill="x", pady=3)
+
+    # rx gain
+    rx_gain_agc = BooleanVar(value=False)
+    ttk.Checkbutton(self, text="Automatic Gain Control", variable=rx_gain_agc, command=lambda : print(b_live_rx.get())).pack(anchor="w")
+
+    rx_gain_frame = ttk.Frame(self)
+    rx_gain_frame.pack(anchor="w")
+    ttk.Label(rx_gain_frame, text="RX Gain (dB)").pack(side="left")
+    rx_gain_slider = Scale(rx_gain_frame, from_=0, to=70, orient=HORIZONTAL)
+    rx_gain_slider.pack(side="left")
+
+    ttk.Separator(self, orient=HORIZONTAL).pack(fill="x", pady=3)
+
+    # probe usb
+    ttk.Button(self, text="Probe USB", command=lambda : print("usb probed")).pack(anchor="w")
+    ttk.Label(self, text="Max rate: ").pack(anchor="w")
+
+
+
+class TXControl(ResizingFrame):
+  def __init__(self, parent):
+    super().__init__(parent)
+
+    self.config(relief="ridge", padding=(10,10,10,10))
+
+    ttk.Label(self, text="Transmitter control (PlutoSDR)", font=bu_font).pack(anchor="w", pady=(0,10))
+
+    # TX enable
+    tx_enable = BooleanVar(value=False)
+    ttk.Checkbutton(self, text="TX Enable", variable=tx_enable, command=lambda : print(tx_enable.get())).pack(anchor="w")
+
+    ttk.Separator(self, orient=HORIZONTAL).pack(fill="x", pady=3)
+
+    # Test sine
+    cw_enable = BooleanVar(value=False)
+    ttk.Checkbutton(self, text="Test CW transmission", variable=cw_enable, command=lambda : print(cw_enable.get())).pack(anchor="w")
+
+    # set freq
+    cw_freq_frame = ttk.Frame(self)
+    cw_freq_frame.pack(anchor="w")
+    cw_freq_offset = DoubleVar(value=300)
+    cw_freq_offset_typing = DoubleVar(value=300)
+
+    ttk.Label(cw_freq_frame, text="CW Frequency offset (Hz): ").grid(row=0, column=0)
+    ttk.Label(cw_freq_frame, textvariable=cw_freq_offset).grid(row=0, column=1)
+    ttk.Entry(cw_freq_frame, width=8, textvariable=cw_freq_offset_typing).grid(row=1, column=0)
+    ttk.Button(cw_freq_frame, text="Set", 
+               command=lambda : cw_freq_offset.set(cw_freq_offset_typing.get())
+               ).grid(row=1, column=1)
+
+    
+
+
+
+class CommsControl(ResizingFrame):
+  def __init__(self, parent):
+    super().__init__(parent)
+
+    self.config(relief="ridge", padding=(10,10,10,10))
+
+    ttk.Label(self, text="Comms control", font=bu_font) \
+       .grid(sticky="nw")
+
+
+    # footer
+    meowl = Image.open("images/meowl.png")
+    meowl.thumbnail((100,100))
+    meowl = ImageTk.PhotoImage(meowl)
+    l = ttk.Label(self, image=meowl)
+    l.grid(sticky="s")
+    l.image = meowl
+
+    ttk.Label(self, text="Made with <3 2026") \
+        .grid(sticky="s")
+ 
+
 
   """
   def add_plot(self, x, y, title):
@@ -167,7 +249,6 @@ class ScrollablePlots(Frame):
   """
 
 
-
-root = Tk()
-gui = GUI(root)
-gui.mainloop()
+if __name__ == "__main__":
+  gui = GUI()
+  root.mainloop()

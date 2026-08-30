@@ -2,9 +2,9 @@ from tkinter import *
 from tkinter import ttk
 from tkinter import font
 
+import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import (
     FigureCanvasTkAgg, NavigationToolbar2Tk)
-# Implement the default Matplotlib key bindings.
 from matplotlib.backend_bases import key_press_handler
 from matplotlib.figure import Figure
 
@@ -26,7 +26,10 @@ b_font.configure(weight="bold")
 
 class GUI:
     def __init__(self):
-      self.window_init()
+      root.geometry("2000x1000")
+      root.title("super cool digital communications thing +_+")
+      root.columnconfigure(0, weight=1)
+      root.rowconfigure(0, weight=1)
 
       main_frame = ttk.Frame(root, padding=3)
       main_frame.grid(row=0, column=0, sticky="nsew")
@@ -59,11 +62,6 @@ class GUI:
         child.grid_configure(padx=4, pady=4)
 
     ################ UTILS ##############
-    def window_init(self):
-      root.geometry("1200x800")
-      root.title("super cool digital communications thing +_+")
-      root.columnconfigure(0, weight=1)
-      root.rowconfigure(0, weight=1)
 
     ############### CALLBACKS ##############
     def rx_button(self, *args):
@@ -96,7 +94,7 @@ class HScrollable(ResizingFrame):
     self.main_frame = Frame(self.canvas)
     self.canvas_window = self.canvas.create_window((0,0), window=self.main_frame, anchor="nw")
 
-    # update canvas when plot_frame changes size
+    # update canvas when main_frame changes size
     self.main_frame.bind("<Configure>", self._update_scrollregion)
 
   def _update_scrollregion(self, event=None):
@@ -106,12 +104,54 @@ class RXGraphs(HScrollable):
   def __init__(self, parent):
     super().__init__(parent)
 
+    self.next_graph_col_i = 0
+    self.figures = []
+    self.canvases = []
+
     self.config(relief="ridge", padding=(10,10,10,10))
 
-    ttk.Label(self.main_frame, text="I/Q constelations").grid(sticky="w")
-    ttk.Label(self.main_frame, text="FFT").grid(sticky="w")
-    ttk.Label(self.main_frame, text="Sync").grid(sticky="w")
-    ttk.Label(self.main_frame, text="USB").grid(sticky="w")
+    #ttk.Label(self.main_frame, text="I/Q constelations").grid(sticky="w")
+    #ttk.Label(self.main_frame, text="FFT").grid(sticky="w")
+    #ttk.Label(self.main_frame, text="Sync").grid(sticky="w")
+    #ttk.Label(self.main_frame, text="USB").grid(sticky="w")
+
+    self.add_plot([1,2,3], [4,3,2], "time data")
+    self.add_plot([1,6,3], [4,3,2], "data time")
+
+
+  def add_plot(self, x, y, title):
+    # Create matplotlib figure
+    fig, ax = plt.subplots(figsize=(3, 3))
+
+    ax.plot(x, y)
+    ax.set_title(title)
+    ax.grid(True)
+
+    # Put matplotlib figure into Tkinter
+    figure_canvas = FigureCanvasTkAgg(
+        fig,
+        master=self.main_frame
+    )
+
+    figure_canvas.draw()
+
+    # Pack plots horizontally
+    widget = figure_canvas.get_tk_widget()
+    widget.grid(row=0, column=self.next_graph_col_i, padx=10, pady=10)
+
+    toolbar = NavigationToolbar2Tk(figure_canvas, self.main_frame, pack_toolbar=False)
+    toolbar.grid(row=1, column=self.next_graph_col_i)
+    toolbar.update()
+
+    self.next_graph_col_i += 1
+
+    # Keep references alive
+    self.figures.append(fig)
+    self.canvases.append(figure_canvas)
+    
+    ### update
+    #canvas.draw_idle() 
+
 
 class TXGraphs(HScrollable):
   def __init__(self, parent):
@@ -142,15 +182,35 @@ class RXControl(ResizingFrame):
 
     ttk.Separator(self, orient=HORIZONTAL).pack(fill="x", pady=3)
 
-    # rx gain
-    rx_gain_agc = BooleanVar(value=False)
-    ttk.Checkbutton(self, text="Automatic Gain Control", variable=rx_gain_agc, command=lambda : print(b_live_rx.get())).pack(anchor="w")
-
+    ### rx gain
+    # manual (packed after agc)
     rx_gain_frame = ttk.Frame(self)
-    rx_gain_frame.pack(anchor="w")
-    ttk.Label(rx_gain_frame, text="RX Gain (dB)").pack(side="left")
-    rx_gain_slider = Scale(rx_gain_frame, from_=0, to=70, orient=HORIZONTAL)
+    rx_manual_gain_label = ttk.Label(rx_gain_frame, text="Manual RX Gain (dB)")
+    rx_manual_gain_label.pack(side="left")
+    rx_gain_slider = Scale(rx_gain_frame, from_=0, to=74, orient=HORIZONTAL)
+    rx_gain_slider.set(0)
     rx_gain_slider.pack(side="left")
+
+    selected_agc_mode = StringVar()
+    def set_agc_mode(*args):
+      print(selected_agc_mode.get())
+      if selected_agc_mode.get() == "Manual":
+        rx_manual_gain_label.config(state="normal")
+        rx_gain_slider.config(state="normal")
+      else:
+        rx_manual_gain_label.config(state="disabled")
+        rx_gain_slider.config(state="disabled")
+
+    rx_agc_frame = ttk.Frame(self)
+    ttk.Label(rx_agc_frame, text="AGC setting").pack(side="left")
+    agc_mode_selector = ttk.Combobox(rx_agc_frame, textvariable=selected_agc_mode, values=["Manual", "Fast Attack", "Slow Attack"], state="readonly")
+    agc_mode_selector.current(0)
+    agc_mode_selector.bind('<<ComboboxSelected>>', set_agc_mode)
+    agc_mode_selector.pack(side="left")
+
+    rx_agc_frame.pack(anchor="w")
+    rx_gain_frame.pack(anchor="w")
+
 
     ttk.Separator(self, orient=HORIZONTAL).pack(fill="x", pady=3)
 
@@ -171,6 +231,16 @@ class TXControl(ResizingFrame):
     # TX enable
     tx_enable = BooleanVar(value=False)
     ttk.Checkbutton(self, text="TX Enable", variable=tx_enable, command=lambda : print(tx_enable.get())).pack(anchor="w")
+
+    ttk.Separator(self, orient=HORIZONTAL).pack(fill="x", pady=3)
+
+    # tx gain
+    tx_gain_frame = ttk.Frame(self)
+    tx_gain_frame.pack(anchor="w")
+    ttk.Label(tx_gain_frame, text="TX Gain (dB)").pack(side="left")
+    tx_gain_slider = Scale(tx_gain_frame, from_=-90, to=0, orient=HORIZONTAL)
+    tx_gain_slider.set(-90)
+    tx_gain_slider.pack(side="left")
 
     ttk.Separator(self, orient=HORIZONTAL).pack(fill="x", pady=3)
 
@@ -216,38 +286,10 @@ class CommsControl(ResizingFrame):
     ttk.Label(self, text="Made with <3 2026") \
         .grid(sticky="s")
  
-
-
-  """
-  def add_plot(self, x, y, title):
-    # Create matplotlib figure
-    fig, ax = plt.subplots(figsize=(5, 4))
-
-    ax.plot(x, y)
-    ax.set_title(title)
-    ax.grid(True)
-
-    # Put matplotlib figure into Tkinter
-    figure_canvas = FigureCanvasTkAgg(
-        fig,
-        master=self.plot_frame
-    )
-
-    figure_canvas.draw()
-
-    # Pack plots horizontally
-    widget = figure_canvas.get_tk_widget()
-    widget.pack(
-        side="left",
-        padx=10,
-        pady=10
-    )
-
-    # Keep references alive
-    self.figures.append(fig)
-    self.canvases.append(figure_canvas)
-  """
-
+def on_close():
+    root.quit()
+    root.destroy()
+root.protocol("WM_DELETE_WINDOW", on_close)
 
 if __name__ == "__main__":
   gui = GUI()

@@ -20,7 +20,38 @@ print(samples[0:10])
 import numpy as np
 import adi
 import matplotlib.pyplot as plt
+from gui import *
 
+a = 0
+def cool_plot():
+    global a
+    # Create matplotlib figure
+    fig, ax = plt.subplots(figsize=(3, 3))
+
+    ax.plot([1,2,3], [4,3,2])
+    ax.set_title("Plot! " + str(a))
+    a += 1
+    ax.grid(True)
+    
+    return fig
+
+gui = GUI()
+
+gui.rx_controls.live_rx_callback         = lambda checked : print("live rx: " + str(checked))
+gui.rx_controls.single_rx_callback       = lambda : print("single rx")
+gui.rx_controls.set_manaul_gain_callback = lambda val_db : print("set manual rx gain: " + val_db)
+gui.rx_controls.set_auto_gain_callback   = lambda agc_setting : print("agc setting: " + agc_setting)
+gui.rx_controls.probe_usb_callback       = lambda : print("probe usb")
+
+gui.tx_controls.tx_enable_callback     = lambda checked : print("tx enable: " + str(checked))
+gui.tx_controls.set_gain_callback      = lambda val : print("set tx gain: " + val)
+gui.tx_controls.test_cw_check_callback = lambda checked : print("test cw: " + str(checked))
+gui.tx_controls.set_cw_offset_callback = lambda freq : print("set cw offset: " + str(freq))
+
+root.mainloop()
+
+
+"""
 sample_rate = 1e6 # Hz
 center_freq = 915e6 # Hz
 num_samps = 100000 # number of samples per call to rx()
@@ -81,3 +112,4 @@ plt.plot(f/1e6, psd_dB)
 plt.xlabel("Frequency [MHz]")
 plt.ylabel("PSD")
 plt.show()
+"""

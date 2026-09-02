@@ -73,6 +73,8 @@ class GUI:
       for child in main_frame.winfo_children():
         child.grid_configure(padx=4, pady=4)
 
+      root.after(2000, lambda : print("a"))
+
     ################ UTILS ##############
 
     ############### CALLBACKS ##############
@@ -149,6 +151,8 @@ class RXGraphs(HScrollable):
     self.figures.append(fig)
     self.canvases.append(figure_canvas)
     
+    return figure_canvas
+
     ### update
     #canvas.draw_idle() 
 
@@ -197,10 +201,10 @@ class RXControl(ResizingFrame):
 
     # live rx
     b_live_rx = BooleanVar(value=False)
-    ttk.Checkbutton(self, text="Live Receive", variable=b_live_rx, command=lambda : self._live_rx_callback(b_live_rx.get())).pack(anchor="w")
+    ttk.Checkbutton(self, text="Live Receive", variable=b_live_rx, command=lambda : self.live_rx_callback(b_live_rx.get())).pack(anchor="w")
 
     # single rx
-    ttk.Button(self, text="Single Receive", command=self._single_rx_callback).pack(anchor="w")
+    ttk.Button(self, text="Single Receive", command=lambda : self.single_rx_callback()).pack(anchor="w")
 
     ttk.Separator(self, orient=HORIZONTAL).pack(fill="x", pady=3)
 
@@ -209,8 +213,8 @@ class RXControl(ResizingFrame):
     rx_gain_frame = ttk.Frame(self)
     rx_manual_gain_label = ttk.Label(rx_gain_frame, text="Manual RX Gain (dB)")
     rx_manual_gain_label.pack(side="left")
-    rx_gain_slider = Scale(rx_gain_frame, from_=0, to=74, orient=HORIZONTAL, command=self._set_manaul_gain_callback)
-    rx_gain_slider.set(0)
+    rx_gain_slider = Scale(rx_gain_frame, from_=0, to=74, orient=HORIZONTAL, command=lambda a : self.set_manaul_gain_callback(a))
+    rx_gain_slider.set(20)
     rx_gain_slider.pack(side="left")
 
     selected_agc_mode = StringVar()
@@ -221,7 +225,7 @@ class RXControl(ResizingFrame):
       else:
         rx_manual_gain_label.config(state="disabled")
         rx_gain_slider.config(state="disabled")
-      self._set_auto_gain_callback(selected_agc_mode.get())
+      self.set_auto_gain_callback(selected_agc_mode.get())
 
     rx_agc_frame = ttk.Frame(self)
     ttk.Label(rx_agc_frame, text="AGC setting").pack(side="left")
@@ -238,22 +242,9 @@ class RXControl(ResizingFrame):
 
     # probe usb
     self.measured_data_rate_percent = StringVar()
-    ttk.Button(self, text="Probe USB", command=self._probe_usb_callback).pack(anchor="w")
+    ttk.Button(self, text="Probe USB", command=lambda : self.probe_usb_callback()).pack(anchor="w")
     ttk.Label(self, text="% of max data rate: ").pack(anchor="w")
     ttk.Label(self, textvariable=self.measured_data_rate_percent).pack(anchor="w")
-
-  def _live_rx_callback(self, a):
-    self.live_rx_callback(a)
-  def _single_rx_callback(self):
-    self.single_rx_callback()
-  def _set_manaul_gain_callback(self, a):
-    self.set_manaul_gain_callback(a)
-  def _set_auto_gain_callback(self, a):
-    self.set_auto_gain_callback(a)
-  def _probe_usb_callback(self):
-    self.probe_usb_callback()
-
-
 
 class TXControl(ResizingFrame):
   def __init__(self, parent,
@@ -282,7 +273,7 @@ class TXControl(ResizingFrame):
 
     # TX enable
     tx_enable = BooleanVar(value=False)
-    ttk.Checkbutton(self, text="TX Enable", variable=tx_enable, command=lambda : self._tx_enable_callback(tx_enable.get())).pack(anchor="w")
+    ttk.Checkbutton(self, text="TX Enable", variable=tx_enable, command=lambda : self.tx_enable_callback(tx_enable.get())).pack(anchor="w")
 
     ttk.Separator(self, orient=HORIZONTAL).pack(fill="x", pady=3)
 
@@ -290,38 +281,29 @@ class TXControl(ResizingFrame):
     tx_gain_frame = ttk.Frame(self)
     tx_gain_frame.pack(anchor="w")
     ttk.Label(tx_gain_frame, text="TX Gain (dB)").pack(side="left")
-    tx_gain_slider = Scale(tx_gain_frame, from_=-90, to=0, orient=HORIZONTAL, command=self._set_gain_callback)
-    tx_gain_slider.set(-90)
+    tx_gain_slider = Scale(tx_gain_frame, from_=-90, to=0, orient=HORIZONTAL, command=lambda a: self.set_gain_callback(a))
+    tx_gain_slider.set(-20)
     tx_gain_slider.pack(side="left")
 
     ttk.Separator(self, orient=HORIZONTAL).pack(fill="x", pady=3)
 
     # Test sine
     cw_enable = BooleanVar(value=False)
-    ttk.Checkbutton(self, text="Test CW transmission", variable=cw_enable, command=lambda : self._test_cw_check_callback(cw_enable.get())).pack(anchor="w")
+    ttk.Checkbutton(self, text="Test CW transmission", variable=cw_enable, command=lambda : self.test_cw_check_callback(cw_enable.get())).pack(anchor="w")
 
     # set freq
     cw_freq_frame = ttk.Frame(self)
     cw_freq_frame.pack(anchor="w")
-    cw_freq_offset = DoubleVar(value=300)
-    cw_freq_offset_typing = DoubleVar(value=300)
+    cw_freq_offset = DoubleVar(value=100000)
+    cw_freq_offset_typing = DoubleVar(value=100000)
 
     ttk.Label(cw_freq_frame, text="CW Frequency offset (Hz): ").grid(row=0, column=0)
     ttk.Label(cw_freq_frame, textvariable=cw_freq_offset).grid(row=0, column=1)
     ttk.Entry(cw_freq_frame, width=8, textvariable=cw_freq_offset_typing).grid(row=1, column=0)
     def set_cw_offset():
       cw_freq_offset.set(cw_freq_offset_typing.get())
-      self._set_cw_offset_callback(cw_freq_offset_typing.get())
+      self.set_cw_offset_callback(cw_freq_offset_typing.get())
     ttk.Button(cw_freq_frame, text="Set", command=set_cw_offset).grid(row=1, column=1)
-
-  def _tx_enable_callback(self, a):
-    self.tx_enable_callback(a)
-  def _set_gain_callback(self, a):
-    self.set_gain_callback(a)
-  def _test_cw_check_callback(self, a):
-    self.test_cw_check_callback(a)
-  def _set_cw_offset_callback(self, a):
-    self.set_cw_offset_callback(a)
 
 
 class CommsControl(ResizingFrame):

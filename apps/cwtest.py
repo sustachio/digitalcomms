@@ -20,8 +20,8 @@ class CWTest():
         samples = 0.5*np.exp(2.0j*np.pi*self.freq*t)
         samples *= 2**14
 
-        self.sdrman.sdr.tx_cyclic_buffer = True
-        self.sdrman.sdr.tx(samples)
+        self.sdrman.cyclic_tx(samples)
 
     def stop_tx(self):
-        self.sdrman.rebuild_tx_buffer()
+        self.sdrman.stop_cyclic_tx()
+

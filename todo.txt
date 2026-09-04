@@ -1,2 +1,0 @@
-Add a cyclic tx backup to sdrman so rebuilding doesn't lose everything
-Get rid of global varialbes for live rx graph

@@ -12,17 +12,6 @@ import numpy as np
 
 from PIL import Image, ImageTk
 
-root = Tk()
-
-default_font = font.nametofont("TkDefaultFont")
-default_font.configure(size=12)
-bu_font = default_font.copy() # bold underline
-bu_font.configure(underline=True, weight="bold")
-u_font = default_font.copy() # underline
-u_font.configure(underline=True)
-b_font = default_font.copy() # bold
-b_font.configure(weight="bold")
-
 
 class GUI:
     def __init__(self):
@@ -34,12 +23,25 @@ class GUI:
       self.tx_graphs : TXGraphs
       """
 
-      root.geometry("1600x800")
-      root.title("super cool digital communications thing +_+")
-      root.columnconfigure(0, weight=1)
-      root.rowconfigure(0, weight=1)
+      self.root = Tk()
 
-      main_frame = ttk.Frame(root, padding=3)
+      self.root.geometry("1600x800")
+      self.root.title("super cool digital communications thing +_+")
+      self.root.columnconfigure(0, weight=1)
+      self.root.rowconfigure(0, weight=1)
+      self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+
+      # fonts
+      self.default_font = font.nametofont("TkDefaultFont")
+      self.default_font.configure(size=12)
+      self.bu_font = self.default_font.copy() # bold underline
+      self.bu_font.configure(underline=True, weight="bold")
+      self.u_font = self.default_font.copy() # underline
+      self.u_font.configure(underline=True)
+      self.b_font = self.default_font.copy() # bold
+      self.b_font.configure(weight="bold")
+
+      main_frame = ttk.Frame(self.root, padding=3)
       main_frame.grid(row=0, column=0, sticky="nsew")
       main_frame.rowconfigure([0,1], weight=1, uniform="rows")
 
@@ -51,35 +53,34 @@ class GUI:
       main_frame.columnconfigure(0, weight=0, minsize=50)
 
       # graphs
-      self.rx_graphs = RXGraphs(main_frame)
+      self.rx_graphs = RXGraphs(self, main_frame)
       self.rx_graphs.grid(row=0, column=1, sticky="nsew")
-      self.tx_graphs = TXGraphs(main_frame)
+      self.tx_graphs = TXGraphs(self, main_frame)
       self.tx_graphs.grid(row=1, column=1, sticky="nsew")
       main_frame.columnconfigure(1, weight=2)
 
       # controls
-      self.rx_controls = RXControl(main_frame)
+      self.rx_controls = RXControl(self, main_frame)
       self.rx_controls.grid(row=0, column=2, sticky="nsew")
-      self.tx_controls = TXControl(main_frame)
+      self.tx_controls = TXControl(self, main_frame)
       self.tx_controls.grid(row=1, column=2, sticky="nsew")
       main_frame.columnconfigure(2, weight=1)
 
       ttk.Separator(main_frame, orient=VERTICAL).grid(row=0, column=3, sticky="nsew", rowspan=2)
       main_frame.columnconfigure(3, weight=0)
 
-      CommsControl(main_frame).grid(row=0, column=4, sticky="nsew", rowspan=2)
+      self.comms_control = CommsControl(self, main_frame)
+      self.comms_control.grid(row=0, column=4, sticky="nsew", rowspan=2)
       main_frame.columnconfigure(4, weight=1)
       
       for child in main_frame.winfo_children():
         child.grid_configure(padx=4, pady=4)
 
-      root.after(2000, lambda : print("a"))
+      self.root.after(2000, lambda : print("a"))
 
-    ################ UTILS ##############
-
-    ############### CALLBACKS ##############
-    def rx_button(self, *args):
-      self.data_text.set("blub")
+    def on_close(self):
+      self.root.quit()
+      self.root.destroy()
 
 
 class ResizingFrame(ttk.Frame):
@@ -114,7 +115,7 @@ class HScrollable(ResizingFrame):
     self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
 class RXGraphs(HScrollable):
-  def __init__(self, parent):
+  def __init__(self, gui, parent):
     super().__init__(parent)
 
     self.next_graph_col_i = 0
@@ -158,18 +159,18 @@ class RXGraphs(HScrollable):
 
 
 class TXGraphs(HScrollable):
-  def __init__(self, parent):
+  def __init__(self, gui, parent):
     super().__init__(parent)
 
     self.config(relief="ridge", padding=(10,10,10,10))
 
     ttk.Label(self.main_frame, text="I/Q constelations").grid(sticky="w")
     ttk.Label(self.main_frame, text="FFT").grid(sticky="w")
-    ttk.Label(self.main_frame, text="hello!!!!", font=bu_font).grid(sticky="w")
+    ttk.Label(self.main_frame, text="hello!!!!", font=gui.bu_font).grid(sticky="w")
     ttk.Label(self.main_frame, text="hiii!!!!").grid(sticky="w")
 
 class RXControl(ResizingFrame):
-  def __init__(self, parent,
+  def __init__(self, gui, parent,
     live_rx_callback         = lambda a : None, # f(bool checked)
     single_rx_callback       = lambda   : None, # f()
     set_manaul_gain_callback = lambda a : None, # f(str val_db)
@@ -196,7 +197,7 @@ class RXControl(ResizingFrame):
 
     self.config(relief="ridge", padding=(10,10,10,10))
 
-    ttk.Label(self, text="Reciever control (PlutoSDR)", font=bu_font) \
+    ttk.Label(self, text="Reciever control (PlutoSDR)", font=gui.bu_font) \
        .pack(anchor="w", pady=(0,10))
 
     # live rx
@@ -247,7 +248,7 @@ class RXControl(ResizingFrame):
     ttk.Label(self, textvariable=self.measured_data_rate_percent).pack(anchor="w")
 
 class TXControl(ResizingFrame):
-  def __init__(self, parent,
+  def __init__(self, gui, parent,
     tx_enable_callback     = lambda a : None, # f(bool checked)
     set_gain_callback      = lambda a : None, # f(str val)
     test_cw_check_callback = lambda a : None, # f(bool checked)
@@ -269,7 +270,7 @@ class TXControl(ResizingFrame):
 
     self.config(relief="ridge", padding=(10,10,10,10))
 
-    ttk.Label(self, text="Transmitter control (PlutoSDR)", font=bu_font).pack(anchor="w", pady=(0,10))
+    ttk.Label(self, text="Transmitter control (PlutoSDR)", font=gui.bu_font).pack(anchor="w", pady=(0,10))
 
     # TX enable
     tx_enable = BooleanVar(value=False)
@@ -307,12 +308,12 @@ class TXControl(ResizingFrame):
 
 
 class CommsControl(ResizingFrame):
-  def __init__(self, parent):
+  def __init__(self, gui, parent):
     super().__init__(parent)
 
     self.config(relief="ridge", padding=(10,10,10,10))
 
-    ttk.Label(self, text="Comms control", font=bu_font) \
+    ttk.Label(self, text="Comms control", font=gui.bu_font) \
        .grid(sticky="nw")
 
 
@@ -327,11 +328,7 @@ class CommsControl(ResizingFrame):
     ttk.Label(self, text="Made with <3 2026") \
         .grid(sticky="s")
  
-def on_close():
-    root.quit()
-    root.destroy()
-root.protocol("WM_DELETE_WINDOW", on_close)
 
 if __name__ == "__main__":
   gui = GUI()
-  root.mainloop()
+  gui.root.mainloop()

@@ -114,20 +114,13 @@ class HScrollable(ResizingFrame):
   def _update_scrollregion(self, event=None):
     self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
-class RXGraphs(HScrollable):
+class HPlots(HScrollable):
   def __init__(self, gui, parent):
     super().__init__(parent)
 
     self.next_graph_col_i = 0
     self.figures = []
     self.canvases = []
-
-    self.config(relief="ridge", padding=(10,10,10,10))
-
-    #ttk.Label(self.main_frame, text="I/Q constelations").grid(sticky="w")
-    #ttk.Label(self.main_frame, text="FFT").grid(sticky="w")
-    #ttk.Label(self.main_frame, text="Sync").grid(sticky="w")
-    #ttk.Label(self.main_frame, text="USB").grid(sticky="w")
 
   def add_plot(self, fig):
     # Put matplotlib figure into Tkinter
@@ -158,16 +151,19 @@ class RXGraphs(HScrollable):
     #canvas.draw_idle() 
 
 
-class TXGraphs(HScrollable):
+
+class RXGraphs(HPlots):
   def __init__(self, gui, parent):
-    super().__init__(parent)
+    super().__init__(gui, parent)
 
     self.config(relief="ridge", padding=(10,10,10,10))
 
-    ttk.Label(self.main_frame, text="I/Q constelations").grid(sticky="w")
-    ttk.Label(self.main_frame, text="FFT").grid(sticky="w")
-    ttk.Label(self.main_frame, text="hello!!!!", font=gui.bu_font).grid(sticky="w")
-    ttk.Label(self.main_frame, text="hiii!!!!").grid(sticky="w")
+class TXGraphs(HPlots):
+  def __init__(self, gui, parent):
+    super().__init__(gui, parent)
+
+    self.config(relief="ridge", padding=(10,10,10,10))
+
 
 class RXControl(ResizingFrame):
   def __init__(self, gui, parent,

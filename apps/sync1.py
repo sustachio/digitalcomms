@@ -16,9 +16,22 @@ class Sync1():
 
         self.running = False
 
+        self.lines = [] # to clear plots
+
+        self.iq_ax.grid(True)
+        self.iq_ax.set_ylim(-100,100)
+        self.constellation_ax.grid(True)
+        self.constellation_ax.set_ylim(-100,100)
+
+        self.iq_axcanvas = None
+        self.constellation_axcanvas = None
+
+
     def start(self):
-        self.iq_axcanvas = self.gui.rx_graphs.add_plot(self.iq_fig)
-        self.iq_axcanvas = self.gui.rx_graphs.add_plot(self.constellation_fig)
+        if not self.iq_axcanvas:
+            self.iq_axcanvas = self.gui.rx_graphs.add_plot(self.iq_fig)
+        if not self.constellation_axcanvas:
+            self.constellation_axcanvas = self.gui.rx_graphs.add_plot(self.constellation_fig)
 
         self.sdrman.rx_buffer_size = 10000
         self.sdrman.rebuild_rx_buffer()
@@ -34,21 +47,20 @@ class Sync1():
 
         self.stop_tx()
 
-        self.iq_ax.cla()
-        self.iq_ax.plot(np.arange(len(samples)), samples.real)
-        self.iq_ax.plot(np.arange(len(samples)), samples.imag)
+        #for line in self.lines:
+            #line.remove()
+        self.lines = []
+
+        self.lines.append(self.iq_ax.plot(np.arange(len(samples)), samples.real))
+        self.lines.append(self.iq_ax.plot(np.arange(len(samples)), samples.imag))
         self.iq_ax.set_title("Plot! " + str(self.a))
 
-        self.constellation_ax.cla()
-        self.constellation_ax.scatter(samples.real, samples.imag)
+        self.lines.append(self.constellation_ax.scatter(samples.real, samples.imag))
         self.constellation_ax.set_title("Plot! " + str(self.a))
 
-        self.iq_ax.grid(True)
-        self.iq_ax.set_ylim(-100,100)
-        self.constellation_ax.grid(True)
-        self.constellation_ax.set_ylim(-100,100)
 
         self.iq_axcanvas.draw()
+        self.constellation_axcanvas.draw()
 
 
     def tx(self):

@@ -26,7 +26,7 @@ class GUI:
       self.root = Tk()
 
       self.root.geometry("1600x800")
-      self.root.title("super cool digital communications thing +_+")
+      self.root.title("super cool digital communications thing *w*")
       self.root.columnconfigure(0, weight=1)
       self.root.rowconfigure(0, weight=1)
       self.root.protocol("WM_DELETE_WINDOW", self.on_close)

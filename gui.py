@@ -71,12 +71,19 @@ class GUI:
 
       self.comms_control = CommsControl(self, main_frame)
       self.comms_control.grid(row=0, column=4, sticky="nsew", rowspan=2)
+      self.comms_control.clear_graphs = self.clear_graphs
       main_frame.columnconfigure(4, weight=1)
       
       for child in main_frame.winfo_children():
         child.grid_configure(padx=4, pady=4)
 
       self.root.after(2000, lambda : print("a"))
+
+    def clear_graphs(self):
+      for child in self.rx_graphs.main_frame.winfo_children():
+        child.destroy()
+      for child in self.tx_graphs.main_frame.winfo_children():
+        child.destroy()
 
     def on_close(self):
       self.root.quit()
@@ -307,22 +314,27 @@ class CommsControl(ResizingFrame):
   def __init__(self, gui, parent):
     super().__init__(parent)
 
+    self.sync1_callback = lambda : None
+    self.clear_graphs = lambda : None
+
     self.config(relief="ridge", padding=(10,10,10,10))
 
-    ttk.Label(self, text="Comms control", font=gui.bu_font) \
-       .grid(sticky="nw")
+    ttk.Label(self, text="Comms control", font=gui.bu_font).pack(anchor="w")
 
+    ttk.Button(self, text="Clear Graphs", command=lambda : self.clear_graphs()).pack(anchor="w")
+
+    ttk.Button(self, text="Sync 1", command=lambda : self.sync1_callback()).pack(anchor="w")
 
     # footer
     meowl = Image.open("images/meowl.png")
     meowl.thumbnail((100,100))
     meowl = ImageTk.PhotoImage(meowl)
     l = ttk.Label(self, image=meowl)
-    l.grid(sticky="s")
+    l.pack(side="bottom")
     l.image = meowl
 
     ttk.Label(self, text="Made with <3 2026") \
-        .grid(sticky="s")
+        .pack(side="bottom")
  
 
 if __name__ == "__main__":

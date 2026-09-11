@@ -2,8 +2,10 @@ import numpy as np
 import adi
 import matplotlib.pyplot as plt
 from gui import *
+
 from apps.cwtest import CWTest
 from apps.liverx import LiveRX
+from apps.sync1  import Sync1
 
 sample_rate = 1e6 # Hz
 center_freq = 915e6 # Hz
@@ -132,5 +134,10 @@ gui.tx_controls.set_cw_offset_callback = cw_test.set_freq
 live_rx = LiveRX(sdrman, gui)
 gui.rx_controls.live_rx_callback   = lambda checked : (live_rx.start() if checked else live_rx.stop())
 gui.rx_controls.single_rx_callback = lambda : live_rx.single_rx()
+
+# sync 1
+sync1 = Sync1(sdrman, gui)
+gui.comms_control.sync1_callback = sync1.start
+#sync1.start()
 
 gui.root.mainloop()

@@ -138,6 +138,6 @@ gui.rx_controls.single_rx_callback = lambda : live_rx.single_rx()
 # sync 1
 sync1 = Sync1(sdrman, gui)
 gui.comms_control.sync1_callback = sync1.start
-#sync1.start()
+sync1.start()
 
 gui.root.mainloop()

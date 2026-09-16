@@ -314,8 +314,10 @@ class CommsControl(ResizingFrame):
   def __init__(self, gui, parent):
     super().__init__(parent)
 
+    ############ ADD APPS 1
     self.sync1_callback = lambda : None
     self.clear_graphs = lambda : None
+    self.frame_sync_callback = lambda : None
 
     self.config(relief="ridge", padding=(10,10,10,10))
 
@@ -323,7 +325,12 @@ class CommsControl(ResizingFrame):
 
     ttk.Button(self, text="Clear Graphs", command=lambda : self.clear_graphs()).pack(anchor="w")
 
+    ############ ADD APPS 2
+    ttk.Label(self, text="Coarse frequency syncronization", font=gui.u_font).pack(anchor="w")
     ttk.Button(self, text="Sync 1", command=lambda : self.sync1_callback()).pack(anchor="w")
+
+    ttk.Label(self, text="Frame Syncronization", font=gui.u_font).pack(anchor="w")
+    ttk.Button(self, text="Frame Sync", command=lambda : self.frame_sync_callback()).pack(anchor="w")
 
     # footer
     meowl = Image.open("images/meowl.png")

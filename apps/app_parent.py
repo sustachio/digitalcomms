@@ -20,7 +20,7 @@ class App:
         self.axs.append(ax)
         self.locations.append(location)
 
-        return (fig, ax)
+        return ax
 
     def reset_plots(self, clear_all=True):
         if clear_all:

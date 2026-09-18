@@ -25,7 +25,7 @@ class GUI:
 
       self.root = Tk()
 
-      self.root.geometry("1600x800")
+      self.root.geometry("1900x800")
       self.root.title("super cool digital communications thing *w*")
       self.root.columnconfigure(0, weight=1)
       self.root.rowconfigure(0, weight=1)
@@ -57,7 +57,7 @@ class GUI:
       self.rx_graphs.grid(row=0, column=1, sticky="nsew")
       self.tx_graphs = TXGraphs(self, main_frame)
       self.tx_graphs.grid(row=1, column=1, sticky="nsew")
-      main_frame.columnconfigure(1, weight=2)
+      main_frame.columnconfigure(1, weight=6)
 
       # controls
       self.rx_controls = RXControl(self, main_frame)

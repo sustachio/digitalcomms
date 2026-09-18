@@ -22,19 +22,18 @@ class Sync1():
         self.iq_ax.grid(True)
         self.iq_ax.set_ylim(-100,100)
         self.iq_ax.set_title("Sync 1: Raw I/Q Data vs. Time")
-        self.iq_axcanvas = None
 
         self.constellation_fig, self.constellation_ax = plt.subplots(figsize=(3, 3))
         self.constellation_ax.grid(True)
         self.constellation_ax.set_ylim(-100,100)
         self.constellation_ax.set_title("Sync 1: Raw I/Q Constellation")
-        self.constellation_axcanvas = None
 
         self.tx_fft_fig, self.tx_fft_ax = plt.subplots(figsize=(3,3))
         self.tx_fft_ax.grid(True)
         self.tx_fft_ax.set_ylim(-30,0)
         self.tx_fft_ax.set_title("Sync 1: FFT")
-        self.tx_fft_axcanvas = None
+
+        self.axs = [self.iq_ax, self.constellation_ax, self.tx_fft_ax]
 
     def time_sync(self, samples, resample_ratio):
         """
@@ -83,10 +82,17 @@ class Sync1():
 
 
     def start(self):
-        if not self.iq_axcanvas:
-            self.iq_axcanvas = self.gui.rx_graphs.add_plot(self.iq_fig)
-        if not self.constellation_axcanvas:
-            self.constellation_axcanvas = self.gui.rx_graphs.add_plot(self.constellation_fig)
+        self.gui.clear_graphs()
+        self.iq_axcanvas = self.gui.rx_graphs.add_plot(self.iq_fig)
+        self.constellation_axcanvas = self.gui.rx_graphs.add_plot(self.constellation_fig)
+        self.tx_fft_axcanvas = self.gui.tx_graphs.add_plot(self.tx_fft_fig)
+
+        for ax in self.axs:
+            ax.set_prop_cycle(None) # reset color cycle
+            for line in list(ax.lines):
+                line.remove()
+            for collection in list(ax.collections):
+                collection.remove()
 
         self.sdrman.rx_buffer_size = 1000
         self.sdrman.rebuild_rx_buffer()
@@ -108,16 +114,12 @@ class Sync1():
 
         self.stop_tx()
 
-        #for line in self.lines:
-            #line.remove()
-        self.lines = []
-
         samples = samples_set[0]
-        self.lines.append(self.iq_ax.plot(np.arange(len(samples)), samples.real))
-        self.lines.append(self.iq_ax.plot(np.arange(len(samples)), samples.imag))
+        self.iq_ax.plot(np.arange(len(samples)), samples.real)
+        self.iq_ax.plot(np.arange(len(samples)), samples.imag)
 
         for samples in samples_set:
-            self.lines.append(self.constellation_ax.scatter(samples.real, samples.imag))
+            self.constellation_ax.scatter(samples.real, samples.imag)
 
 
         self.iq_axcanvas.draw()

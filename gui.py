@@ -81,9 +81,9 @@ class GUI:
 
     def clear_graphs(self):
       for child in self.rx_graphs.main_frame.winfo_children():
-        child.destroy()
+        child.grid_remove()
       for child in self.tx_graphs.main_frame.winfo_children():
-        child.destroy()
+        child.grid_remove()
 
     def on_close(self):
       self.root.quit()

@@ -3,46 +3,27 @@ import adi
 import matplotlib.pyplot as plt
 from scipy import signal
 import time
+from apps.app_parent import App
 
 fs = 1e6
 cycles_per_symbol = 10 
 
-class FrameSync():
+class FrameSync(App):
     def __init__(self, sdrman, gui):
-        self.sdrman = sdrman
-        self.gui = gui
+        super().__init__(sdrman, gui)
 
         self.preamble_symbols = np.random.randint(0, 4, 10)
 
-        self.running = False
+        self.iq_fig, self.iq_ax = \
+            self.new_plot("rx", "Raw I/Q", -100, 100)
+        self.constellation_fig, self.constellation_ax = \
+            self.new_plot("rx", "I/Q Constellation", -100, 100)
+        self.tx_fft_fig, self.tx_fft_ax = \
+            self.new_plot("tx", "FFT", -30, 0)
 
-        self.lines = [] # to clear plots
-
-        self.iq_fig, self.iq_ax = plt.subplots(figsize=(3, 3))
-        self.iq_ax.grid(True)
-        self.iq_ax.set_ylim(-100,100)
-        self.iq_ax.set_title("Sync 1: Raw I/Q Data vs. Time")
-        self.iq_axcanvas = None
-
-        self.constellation_fig, self.constellation_ax = plt.subplots(figsize=(3, 3))
-        self.constellation_ax.grid(True)
-        self.constellation_ax.set_ylim(-100,100)
-        self.constellation_ax.set_title("Sync 1: Raw I/Q Constellation")
-        self.constellation_axcanvas = None
-
-        self.tx_fft_fig, self.tx_fft_ax = plt.subplots(figsize=(3,3))
-        self.tx_fft_ax.grid(True)
-        self.tx_fft_ax.set_ylim(-30,0)
-        self.tx_fft_ax.set_title("Sync 1: FFT")
-        self.tx_fft_axcanvas = None
-
-    
 
     def start(self):
-        if not self.iq_axcanvas:
-            self.iq_axcanvas = self.gui.rx_graphs.add_plot(self.iq_fig)
-        if not self.constellation_axcanvas:
-            self.constellation_axcanvas = self.gui.rx_graphs.add_plot(self.constellation_fig)
+        self.reset_plots()
 
         self.sdrman.rx_buffer_size = 10000
         self.sdrman.rebuild_rx_buffer()
@@ -63,18 +44,13 @@ class FrameSync():
 
         self.stop_tx()
 
-        #for line in self.lines:
-            #line.remove()
-        self.lines = []
+        self.iq_ax.plot(np.arange(len(samples)), samples.real)
+        self.iq_ax.plot(np.arange(len(samples)), samples.imag)
+        self.iq_ax.plot(np.arange(len(correlation)), np.abs(correlation))
 
-        self.lines.append(self.iq_ax.plot(np.arange(len(samples)), samples.real))
-        self.lines.append(self.iq_ax.plot(np.arange(len(samples)), samples.imag))
-        self.lines.append(self.iq_ax.plot(np.arange(len(correlation)), np.abs(correlation)))
+        self.constellation_ax.scatter(samples.real, samples.imag)
 
-        self.lines.append(self.constellation_ax.scatter(samples.real, samples.imag))
-
-        self.iq_axcanvas.draw()
-        self.constellation_axcanvas.draw()
+        self.draw_plots()
 
     def generate_samples(self, symbols):
         symbols = np.repeat(symbols, cycles_per_symbol)
@@ -83,9 +59,6 @@ class FrameSync():
         return samples
 
     def tx(self):
-        if not self.tx_fft_axcanvas:
-            self.tx_fft_axcanvas = self.gui.tx_graphs.add_plot(self.tx_fft_fig)
-
         self.sdrman.rebuild_tx_buffer()
 
         Nsymbols = 100
@@ -105,9 +78,8 @@ class FrameSync():
         fft_f = np.linspace(fs/-2, fs/2, len(psd_dB))
         psd_dB -= np.max(psd_dB)
 
-        self.lines.append(self.tx_fft_ax.plot(fft_f, psd_dB))
-        #self.lines.append(self.tx_fft_ax.plot(np.arange(len(samples)), samples))
-        self.tx_fft_axcanvas.draw()
+        self.tx_fft_ax.plot(fft_f, psd_dB)
+        #self.tx_fft_ax.plot(np.arange(len(samples)), samples)
 
         self.sdrman.cyclic_tx(samples)
 

@@ -130,21 +130,27 @@ class HPlots(HScrollable):
     self.canvases = []
 
   def add_plot(self, fig):
+    # toolbar + plot frame
+    widget_frame = ttk.Frame(self.main_frame, width=400, height=600)
+    #widget_frame.grid_propagate(False)
+    
     # Put matplotlib figure into Tkinter
     figure_canvas = FigureCanvasTkAgg(
         fig,
-        master=self.main_frame
+        master=widget_frame
     )
 
     figure_canvas.draw()
 
     # Pack plots horizontally
     widget = figure_canvas.get_tk_widget()
-    widget.grid(row=0, column=self.next_graph_col_i, padx=10, pady=10)
+    widget.grid(row=0, column=0, padx=10, pady=10, sticky="w")
 
-    toolbar = NavigationToolbar2Tk(figure_canvas, self.main_frame, pack_toolbar=False)
-    toolbar.grid(row=1, column=self.next_graph_col_i)
+    toolbar = NavigationToolbar2Tk(figure_canvas, widget_frame, pack_toolbar=False)
+    toolbar.grid(row=1, column=0, sticky="w")
     toolbar.update()
+
+    widget_frame.grid(row=0, column=self.next_graph_col_i)
 
     self.next_graph_col_i += 1
 
@@ -152,10 +158,11 @@ class HPlots(HScrollable):
     self.figures.append(fig)
     self.canvases.append(figure_canvas)
     
+    ### update
+    figure_canvas.draw_idle() 
+
     return figure_canvas
 
-    ### update
-    #canvas.draw_idle() 
 
 
 

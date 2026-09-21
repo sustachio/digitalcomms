@@ -16,11 +16,11 @@ class FrameSync(App):
 
         self.preamble_symbols = np.random.randint(0, 4, preamble_length)
 
-        self.iq_ax            = self.new_plot("rx", "Raw I/Q", -100, 100)
-        self.constellation_ax = self.new_plot("rx", "I/Q Constellation", -100, 100)
-        self.frame_iq_ax      = self.new_plot("rx", "Frame I/Q", -100, 100)
-        self.tx_frame_iq_ax   = self.new_plot("tx", "Frame I/Q", -3, 3)
-        self.tx_fft_ax        = self.new_plot("tx", "FFT", -30, 0)
+        self.iq_ax            = self.new_plot("rx", "Raw I/Q", ybounds=(-100, 100))
+        self.constellation_ax = self.new_plot("rx", "I/Q Constellation", ybounds=(-100, 100), xbounds=(-100,100))
+        self.frame_iq_ax      = self.new_plot("rx", "Frame I/Q", ybounds=(-100, 100))
+        self.tx_frame_iq_ax   = self.new_plot("tx", "Frame I/Q", ybounds=(-3, 3))
+        self.tx_fft_ax        = self.new_plot("tx", "FFT", ybounds=(-30, 0))
 
 
     def start(self):

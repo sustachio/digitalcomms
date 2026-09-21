@@ -10,10 +10,13 @@ class App:
         self.ax_canvases = []
         self.locations = [] # rx or tx
 
-    def new_plot(self, location, title, miny, maxy):
+    def new_plot(self, location, title, ybounds=(0,0), xbounds=(0,0)):
         fig, ax = plt.subplots(figsize=(3, 3))
         ax.grid(True)
-        ax.set_ylim(miny, maxy)
+        if ybounds != (0,0):
+          ax.set_ylim(ybounds[0], ybounds[1])
+        if xbounds != (0,0):
+          ax.set_xlim(xbounds[0], xbounds[1])
         ax.set_title(title)
 
         self.figs.append(fig)
@@ -46,5 +49,5 @@ class App:
 
     def draw_plots(self):
         for canvas in self.ax_canvases:
-            canvas.draw()
+            canvas.draw_idle()
 

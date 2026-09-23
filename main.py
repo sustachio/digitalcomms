@@ -7,6 +7,7 @@ from apps.cwtest import CWTest
 from apps.liverx import LiveRX
 from apps.sync1  import Sync1
 from apps.framesync  import FrameSync
+from apps.schmidl_cox  import SchmidlCox
 
 sample_rate = 1e6 # Hz
 center_freq = 915e6 # Hz
@@ -14,8 +15,10 @@ num_samps = 10000 # number of samples per call to rx()
 
 # Config Tx
 class SDRManager:
-    def __init__(self):
-        self.sdr = adi.Pluto("ip:192.168.2.1")
+    def __init__(self, uri):
+        #iio_info -s
+        self.sdr = adi.Pluto(uri)
+        #192.168.3.1
         self.sdr.sample_rate = int(sample_rate)
 
         self.tx_rf_bandwidth = int(sample_rate)
@@ -82,7 +85,10 @@ def rx_plot():
     
     return fig
 
-sdrman = SDRManager()
+# iio_info -u "ip:169.254.12.16" -s
+sdrman      = SDRManager("ip:192.168.2.1") # reg
+sdrplusman  = SDRManager("ip:10.3.33.236") # plus
+#sdrman = SDRManager("ip:169.254.12.16") # plus
 
 ################# GUI CONTROLS ###############
 gui = GUI()
@@ -133,7 +139,7 @@ gui.tx_controls.set_cw_offset_callback = cw_test.set_freq
 
 ############### ADD APPS 3
 # live rx
-live_rx = LiveRX(sdrman, gui)
+live_rx = LiveRX(sdrplusman, gui)
 gui.rx_controls.live_rx_callback   = lambda checked : (live_rx.start() if checked else live_rx.stop())
 gui.rx_controls.single_rx_callback = lambda : live_rx.single_rx()
 
@@ -143,8 +149,12 @@ gui.comms_control.sync1_callback = sync1.start
 #sync1.start()
 
 # frame sync
-frame_sync = FrameSync(sdrman, gui)
+frame_sync = FrameSync(sdrman, sdrplusman, gui)
 gui.comms_control.frame_sync_callback = frame_sync.start
-frame_sync.start()
 
+# schmidl cox
+cox = SchmidlCox(sdrman, sdrplusman, gui)
+gui.comms_control.cox_callback = cox.start
+
+cox.start()
 gui.root.mainloop()

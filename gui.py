@@ -325,6 +325,7 @@ class CommsControl(ResizingFrame):
     self.sync1_callback = lambda : None
     self.clear_graphs = lambda : None
     self.frame_sync_callback = lambda : None
+    self.cox_callback = lambda : None
 
     self.config(relief="ridge", padding=(10,10,10,10))
 
@@ -337,7 +338,12 @@ class CommsControl(ResizingFrame):
     ttk.Button(self, text="Sync 1", command=lambda : self.sync1_callback()).pack(anchor="w")
 
     ttk.Label(self, text="Frame Syncronization", font=gui.u_font).pack(anchor="w")
+    ttk.Label(self, text="Correlate PSK with known preamble, same tx/rx", wraplength=400).pack(anchor="w")
     ttk.Button(self, text="Frame Sync", command=lambda : self.frame_sync_callback()).pack(anchor="w")
+
+    ttk.Label(self, text="Schmidl Cox", font=gui.u_font).pack(anchor="w")
+    ttk.Label(self, text="Frame syncronization and coarse frequency estimation using a self repeating preamble", wraplength=400).pack(anchor="w")
+    ttk.Button(self, text="Schmidl Cox", command=lambda : self.cox_callback()).pack(anchor="w")
 
     # footer
     meowl = Image.open("images/meowl.png")

@@ -1,8 +1,9 @@
 import matplotlib.pyplot as plt
 
 class App:
-    def __init__(self, sdrman, gui):
+    def __init__(self, sdrman, sdrplusman, gui):
         self.sdrman = sdrman
+        self.sdrplusman = sdrplusman
         self.gui = gui
 
         self.axs = []

@@ -1,20 +1,16 @@
+
 import numpy as np
 import adi
 import matplotlib.pyplot as plt
-from scipy import signal
+from scipy import signal, fft
 import time
 from apps.app_parent import App
 
 fs = 1e6
-Nsymbols = 10
-cycles_per_symbol = 10 
-preamble_length = 5
 
-class FrameSync(App):
+class SchmidlCox(App):
     def __init__(self, sdrman, sdrplusman, gui):
         super().__init__(sdrman, sdrplusman, gui)
-
-        self.preamble_symbols = np.random.randint(0, 4, preamble_length)
 
         self.iq_ax            = self.new_plot("rx", "Raw I/Q", ybounds=(-100, 100))
         self.constellation_ax = self.new_plot("rx", "I/Q Constellation", ybounds=(-100, 100), xbounds=(-100,100))
@@ -40,22 +36,25 @@ class FrameSync(App):
         #samples_interpolated = signal.resample_poly(samples, 16, 1)
 
         # preamble detection
-        correlation = signal.correlate(samples, self.generate_samples(self.preamble_symbols), mode="valid")
-        correlation = abs(correlation)
-        correlation = correlation / (max(correlation)) * 60
+        correlation = samples * np.conj(np.pad(samples, (20,0)))[:len(samples)]
+        correlation = np.convolve(correlation, np.ones(40), mode="valid") # moving average
 
-        frame_start = np.argmax(correlation)
-        frame = samples[frame_start:frame_start+(Nsymbols+preamble_length)*cycles_per_symbol]
 
+        #correlation = signal.correlate(samples, self.generate_samples(self.preamble_symbols), mode="valid")
+        #correlation = abs(correlation)
+        #correlation = correlation / (max(correlation)) * 60
+
+        #frame_start = np.argmax(correlation)
+        #frame = samples[frame_start:frame_start+(Nsymbols+preamble_length)*cycles_per_symbol]
 
         self.stop_tx()
 
         self.iq_ax.plot(np.arange(len(samples)), samples.real)
         self.iq_ax.plot(np.arange(len(samples)), samples.imag)
-        self.iq_ax.plot(np.arange(len(correlation)), np.abs(correlation))
+        #self.iq_ax.plot(np.arange(len(correlation)), np.abs(correlation))
 
-        self.frame_iq_ax.plot(np.arange(len(frame)), frame.real)
-        self.frame_iq_ax.plot(np.arange(len(frame)), frame.imag)
+        #self.frame_iq_ax.plot(np.arange(len(frame)), frame.real)
+        #self.frame_iq_ax.plot(np.arange(len(frame)), frame.imag)
 
         self.constellation_ax.scatter(samples.real, samples.imag)
 
@@ -70,17 +69,19 @@ class FrameSync(App):
     def tx(self):
         self.sdrman.rebuild_tx_buffer()
 
-        symbols =  np.random.randint(0, 4, Nsymbols)
-        symbols = np.concatenate((self.preamble_symbols, symbols))
+        cox_freqs = np.random.rand(41).astype(complex)
+        cox_freqs[::2] = 0
+        cox_freqs[20] = 0 # remove DC
 
-        pad_len = 3000
-        samples = self.generate_samples(symbols)
+        samples = fft.fft(cox_freqs)
 
         self.tx_frame_iq_ax.plot(np.arange(len(samples)), samples.real)
         self.tx_frame_iq_ax.plot(np.arange(len(samples)), samples.imag)
 
+        pad_len = 3000
         samples = np.pad(samples, pad_len)
-        t = np.arange(len(symbols) * cycles_per_symbol + 2*pad_len)/fs - pad_len/fs
+
+        t = np.arange(len(samples))/fs - pad_len/fs
         samples *= 0.5*np.exp(2.0j*np.pi*5000*t)
         samples *= 2**14
 

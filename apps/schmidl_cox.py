@@ -8,6 +8,10 @@ from apps.app_parent import App
 
 fs = 1e6
 
+L=200
+pad_len = 1000
+
+
 class SchmidlCox(App):
     def __init__(self, sdrman, sdrplusman, gui):
         super().__init__(sdrman, sdrplusman, gui)
@@ -33,6 +37,7 @@ class SchmidlCox(App):
 
         t = np.arange(self.sdrman.rx_buffer_size)/fs
         samples = self.sdrman.sdr.rx() * np.exp(-2.0j*np.pi*5000*t)
+        samples += (np.random.rand(len(samples)) + 1j*np.random.rand(len(samples)))*100
         #samples_interpolated = signal.resample_poly(samples, 16, 1)
 
         # preamble detection
@@ -49,9 +54,25 @@ class SchmidlCox(App):
 
         self.stop_tx()
 
-        self.iq_ax.plot(np.arange(len(samples)), samples.real)
-        self.iq_ax.plot(np.arange(len(samples)), samples.imag)
+        #self.iq_ax.plot(np.arange(len(samples)), samples.real)
+        #self.iq_ax.plot(np.arange(len(samples)), samples.imag)
         #self.iq_ax.plot(np.arange(len(correlation)), np.abs(correlation))
+
+        self.iq_ax.plot(np.arange(len(samples)), np.abs(samples))
+        # each row is one L_test length
+        metric = np.zeros((L*2-10, len(samples))).astype(complex)
+        for L_test in range(L-5, L+5):
+            for d in range(len(samples) - L_test*2):
+                for m in range(L_test-1):
+                    metric[L_test+5][d] += samples[d+m].conj() * samples[d+m+L_test]
+
+            print(L_test)
+
+        delays = np.sum(metric, axis=1)
+        best_delay = np.argmax(delays)
+
+        self.iq_ax.plot(np.arange(len(metric[best_delay])), np.abs(metric[best_delay])/np.max(np.abs(metric[best_delay]))*1000)
+        self.iq_ax.plot(np.arange(len(delays)), np.abs(delays)/np.max(np.abs(delays))*1000)
 
         #self.frame_iq_ax.plot(np.arange(len(frame)), frame.real)
         #self.frame_iq_ax.plot(np.arange(len(frame)), frame.imag)
@@ -69,25 +90,43 @@ class SchmidlCox(App):
     def tx(self):
         self.sdrman.rebuild_tx_buffer()
 
-        cox_freqs = np.random.rand(41).astype(complex)
-        cox_freqs[::2] = 0
-        cox_freqs[20] = 0 # remove DC
+        cox_freqs = np.random.rand(2*L).astype(complex)
+        #cox_freqs = np.zeros(41)
+        cox_freqs[1::2] = 0
+        #cox_freqs[20] = 0 # remove DC
+        #cox_freqs[1::2] = 1
+        #cox_freqs[1:10:2] = 1
+        #cox_freqs[1] = 1
+        #cox_freqs[3] = 1
 
-        samples = fft.fft(cox_freqs)
-
-        self.tx_frame_iq_ax.plot(np.arange(len(samples)), samples.real)
-        self.tx_frame_iq_ax.plot(np.arange(len(samples)), samples.imag)
-
-        pad_len = 3000
+        samples = fft.ifft(cox_freqs, norm="forward")
         samples = np.pad(samples, pad_len)
+        #samples += np.random.rand(len(samples)) + 1j*np.random.rand(len(samples))
 
-        t = np.arange(len(samples))/fs - pad_len/fs
+        metric = np.zeros(L*2 + pad_len*2).astype(complex)
+        for d in range(len(samples) - L*2):
+            met = 0
+            for m in range(L):
+                met += samples[d+m].conj() * samples[d+m+L]
+            metric[d] = met
+        #metric = samples * (np.pad(samples, (L, 0))[:-L]).conj()
+        #metric = np.pad(samples, (20, 0))[:-20]
+        #metric = np.convolve(metric, np.ones(40), mode="valid")
+
+        self.tx_frame_iq_ax.plot(np.arange(len(samples)), np.abs(samples))
+        #self.tx_frame_iq_ax.plot(np.arange(len(samples)), samples.imag)
+        self.tx_frame_iq_ax.plot(np.arange(len(metric))-20, np.abs(metric)/np.max(np.abs(metric)))
+
+        spacepad_len = 3000
+        samples = np.pad(samples, spacepad_len)
+
+        t = np.arange(len(samples))/fs - spacepad_len/fs
         samples *= 0.5*np.exp(2.0j*np.pi*5000*t)
         samples *= 2**14
 
         # plot fft
         psd = np.abs(np.fft.fftshift(np.fft.fft(samples/(2**14))))**2
-        psd_dB = 10*np.log10(psd)
+        psd_dB = 10*np.log10(psd+1e-6)
         fft_f = np.linspace(fs/-2, fs/2, len(psd_dB))
         psd_dB -= np.max(psd_dB)
 

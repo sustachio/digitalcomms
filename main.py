@@ -87,7 +87,7 @@ def rx_plot():
 
 # iio_info -u "ip:169.254.12.16" -s
 sdrman      = SDRManager("ip:192.168.2.1") # reg
-sdrplusman  = SDRManager("ip:10.3.34.30") # plus
+sdrplusman  = SDRManager("ip:10.3.33.225") # plus
 #sdrman = SDRManager("ip:169.254.12.16") # plus
 
 ################# GUI CONTROLS ###############

@@ -12,6 +12,32 @@ L=600
 pad_len = 10000
 freqpad = 224
 
+class OFDM:
+    def __init__(self, K, Kon, CP): # carriers, carries enabled, cyclic prefix
+        self.K = K
+        self.Kon = Kon
+        self.CP = CP
+
+    def modulate(self, qam): # center of qam is 0hz
+        assert(len(qam) == self.Kon)
+
+        offset = int((self.K-self.Kon)/2)
+        freqs = np.pad(qam, (offset + (1 if (self.K-self.Kon)%2==1 else 0), offset))
+        freqs = np.fft.fftshift(freqs)
+        signal = np.fft.ifft(freqs) * np.sqrt(self.K)
+        
+        if self.CP > 0:
+            signal = np.hstack([signal[-self.CP:], signal])
+
+        return signal
+
+    def random_4psk(self):
+        qam = np.array([1+1j, 1-1j, -1+1j, -1-1j]) * np.sqrt(2)
+        return np.random.choice(qam, size=self.Kon, replace=True)
+
+    def random_qam(self):
+        return (np.random.rand(self.Kon) + 1j*np.random.rand(self.Kon)) / np.sqrt(2)
+
 
 class SchmidlCox(App):
     def __init__(self, sdrman, sdrplusman, gui):
@@ -22,6 +48,8 @@ class SchmidlCox(App):
         self.frame_iq_ax      = self.new_plot("rx", "Frame I/Q", ybounds=(-100, 100))
         self.tx_frame_iq_ax   = self.new_plot("tx", "Frame I/Q", ybounds=(-3, 3))
         self.tx_fft_ax        = self.new_plot("tx", "FFT", ybounds=(-30, 0))
+
+        self.ofdm = OFDM(1024, 600, 128)
 
 
     def start(self):
@@ -72,7 +100,8 @@ class SchmidlCox(App):
         """
         #metric = samples * (np.pad(samples, (L, 0))[:-L]).conj()
         #metric = np.convolve(metric, np.ones(L), mode="valid")
-        metric = self.calc_metric(samples) * 50
+        metric, _, _ = self.calc_metric(samples)
+        metric *= 50
 
         #delays = np.sum(metric, axis=1)
         #best_delay = np.argmax(delays)
@@ -80,7 +109,6 @@ class SchmidlCox(App):
         self.iq_ax.plot(np.arange(len(metric)), metric)
 
         #self.iq_ax.plot(np.arange(len(delays)), np.abs(delays)/np.max(np.abs(delays))*1000)
-        metric = np.convolve(metric, np.ones(L+2*freqpad), mode="valid")
 
         #self.frame_iq_ax.plot(np.arange(len(frame)), frame.real)
         #self.frame_iq_ax.plot(np.arange(len(frame)), frame.imag)
@@ -96,55 +124,62 @@ class SchmidlCox(App):
         return samples
 
     def calc_metric(self, samples):
-        metric = samples * (np.pad(samples, (0,int(L/2+freqpad)))[int(L/2+freqpad):]).conj()
-        #metric = np.abs(metric)
-        metric = np.convolve(metric, np.ones(int(L/2+freqpad)), mode="valid")
-        R = np.convolve(np.abs(samples)**2, np.ones(int(L/2+freqpad)), mode="valid")
-        metric = (metric**2) / (R**2)
-        metric = np.abs(metric) / np.max(np.abs(metric))
+        L = self.ofdm.K//2
+        P = samples * (np.pad(samples, (0,L))[L:]).conj() # x[n] * x[n-L].conj()
+        P = np.convolve(P, np.ones(L), mode="valid") # sumnation
+        R = np.convolve(np.square(np.abs(samples)), np.ones(L), mode="valid") # sig strength
+        R = np.pad(R, (0,L))[L:] # shift left L
+        metric = (np.square(P)) / (np.square(R) + 1e-9)
 
-        return metric
+        # cutoff ends
+        P = P[:-L]
+        R = R[:-L]
+        metric = metric[:-L]
 
+        # normalize
+        metric = np.abs(metric) / (np.max(np.abs(metric)) + 1e-9)
+        P = np.abs(P) / np.max(np.abs(P) + 1e-9)
+        R = np.abs(R) / np.max(np.abs(R) + 1e-9)
+
+        return metric, P, R
+
+    def cox_preamble(self):
+        cox_freqs = self.ofdm.random_4psk()
+        cox_freqs[::2] = 0
+        return self.ofdm.modulate(cox_freqs)
 
     def tx(self):
-        self.sdrman.rebuild_tx_buffer()
-
-
-        qam = np.array([1+1j, 1-1j, -1+1j, -1-1j])
-        cox_freqs = np.random.choice(qam, size=L, replace=True)
-        #cox_freqs = np.zeros(L)
-        #cox_freqs[int(L/2+1)] = 1
-        #cox_freqs[int(L/2+3)] = 1
-
-        cox_freqs[0::2] = 0
-
-        cox_freqs = np.pad(cox_freqs, freqpad)
-        cox_freqs = np.fft.fftshift(cox_freqs)
-        
-        samples = fft.ifft(cox_freqs, norm="ortho")*10
-
-        # add CP
-        samples = np.hstack([samples[-128:], samples])
-
-        samples = np.pad(samples, pad_len)
-
-
-        """
-        metric = np.zeros(L*2 + pad_len*2).astype(complex)
-        for d in range(len(samples) - L*2):
-            met = 0
-            for m in range(L):
-                met += samples[d+m].conj() * samples[d+m+L]
-            metric[d] = met
-        """
-        metric = self.calc_metric(samples)
-
-        self.tx_frame_iq_ax.plot(np.arange(len(samples)), np.real(samples))
-        #self.tx_frame_iq_ax.plot(np.arange(len(samples)), samples.imag)
-        self.tx_frame_iq_ax.plot(np.arange(len(metric)), np.abs(metric))
-        #self.tx_frame_iq_ax.plot(np.arange(len(R)), np.abs(R))
-
+        txnullpad = 10000
         spacepad_len = 3000
+
+        self.sdrman.rebuild_tx_buffer()
+        
+        samples = self.cox_preamble()
+        samples = np.pad(samples, txnullpad)
+
+        samples += (np.random.rand(len(samples)) + 1j*np.random.rand(len(samples))-.5-.5j) / np.sqrt(2)
+
+        metric, P, R = self.calc_metric(samples)
+        """
+        L = self.ofdm.K//2
+        metric = samples * (np.pad(samples, (0,L))[L:]).conj()
+        metric = np.convolve(metric, np.ones(L), mode="valid")
+        R = np.convolve(np.square(np.abs(samples)), np.ones(L), mode="valid")
+        R = np.pad(R, (0,L))[L:]
+        metric2 = (np.square(metric)) / (np.square(R) + 1e-9)
+        #metric = np.abs(metric) / (np.max(np.abs(metric)) + 1e-9)
+        """
+
+
+        self.tx_frame_iq_ax.plot(np.arange(len(samples)), np.abs(samples))
+        self.tx_frame_iq_ax.plot(np.arange(len(metric)), P)
+        self.tx_frame_iq_ax.plot(np.arange(len(metric)), R)
+        self.tx_frame_iq_ax.plot(np.arange(len(metric)), metric)
+
+        self.tx_frame_iq_ax.axvline(x=txnullpad, color='orange') # CP start
+        self.tx_frame_iq_ax.axvline(x=txnullpad+self.ofdm.CP, color='orange') # preamble start
+        self.tx_frame_iq_ax.axvline(x=txnullpad+self.ofdm.CP+self.ofdm.K, color='orange') # preamble end
+
         samples = np.pad(samples, spacepad_len)
 
         t = np.arange(len(samples))/fs - spacepad_len/fs

@@ -225,7 +225,7 @@ class RXControl(ResizingFrame):
     rx_manual_gain_label = ttk.Label(rx_gain_frame, text="Manual RX Gain (dB)")
     rx_manual_gain_label.pack(side="left")
     rx_gain_slider = Scale(rx_gain_frame, from_=0, to=74, orient=HORIZONTAL, command=lambda a : self.set_manaul_gain_callback(a))
-    rx_gain_slider.set(20)
+    rx_gain_slider.set(50)
     rx_gain_slider.pack(side="left")
 
     selected_agc_mode = StringVar()

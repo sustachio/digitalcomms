@@ -66,54 +66,24 @@ class SchmidlCox(App):
 
         t = np.arange(self.sdrman.rx_buffer_size)/fs
         samples = self.sdrman.sdr.rx() * np.exp(-2.0j*np.pi*5000*t)
-        #samples += (np.random.rand(len(samples)) + 1j*np.random.rand(len(samples)))*100
-        #samples_interpolated = signal.resample_poly(samples, 16, 1)
-
-        # preamble detection
-        #correlation = samples * np.conj(np.pad(samples, (20,0)))[:len(samples)]
-        #correlation = np.convolve(correlation, np.ones(40), mode="valid") # moving average
-
-
-        #correlation = signal.correlate(samples, self.generate_samples(self.preamble_symbols), mode="valid")
-        #correlation = abs(correlation)
-        #correlation = correlation / (max(correlation)) * 60
-
-        #frame_start = np.argmax(correlation)
-        #frame = samples[frame_start:frame_start+(Nsymbols+preamble_length)*cycles_per_symbol]
 
         self.stop_tx()
 
-        #self.iq_ax.plot(np.arange(len(samples)), samples.real)
-        #self.iq_ax.plot(np.arange(len(samples)), samples.imag)
-        #self.iq_ax.plot(np.arange(len(correlation)), np.abs(correlation))
-
         self.iq_ax.plot(np.arange(len(samples)), np.abs(samples))
-        # each row is one L_test length
-        """
-        metric = np.zeros((L*2-10, len(samples))).astype(complex)
-        for L_test in range(L-5, L+5):
-            for d in range(len(samples) - L_test*2):
-                for m in range(L_test-1):
-                    metric[L_test+5][d] += samples[d+m].conj() * samples[d+m+L_test]
 
-            print(L_test)
-        """
-        #metric = samples * (np.pad(samples, (L, 0))[:-L]).conj()
-        #metric = np.convolve(metric, np.ones(L), mode="valid")
         metric, _, _ = self.calc_metric(samples)
+        sync = self.sync_from_metric(metric)
         metric *= 50
+        sync *= 50
 
-        #delays = np.sum(metric, axis=1)
-        #best_delay = np.argmax(delays)
+        start_inds = np.flatnonzero(sync)
+        frames = [] 
+        for i in start_inds:
+            frames = np.hstack([frames, samples[i : i+2*self.ofdm.K]])
 
         self.iq_ax.plot(np.arange(len(metric)), metric)
-
-        #self.iq_ax.plot(np.arange(len(delays)), np.abs(delays)/np.max(np.abs(delays))*1000)
-
-        #self.frame_iq_ax.plot(np.arange(len(frame)), frame.real)
-        #self.frame_iq_ax.plot(np.arange(len(frame)), frame.imag)
-
-        self.constellation_ax.scatter(samples.real, samples.imag)
+        self.iq_ax.plot(np.arange(len(sync)), sync)
+        self.constellation_ax.scatter(frames.real, frames.imag)
 
         self.draw_plots()
 
@@ -129,7 +99,7 @@ class SchmidlCox(App):
         P = np.convolve(P, np.ones(L), mode="valid") # sumnation
         R = np.convolve(np.square(np.abs(samples)), np.ones(L), mode="valid") # sig strength
         R = np.pad(R, (0,L))[L:] # shift left L
-        metric = (np.square(P)) / (np.square(R) + 1e-9)
+        metric = (np.abs(np.square(P))) / (np.square(R) + 1e-9)
 
         # cutoff ends
         P = P[:-L]
@@ -143,6 +113,21 @@ class SchmidlCox(App):
 
         return metric, P, R
 
+    def sync_from_metric(self, metric):
+        metric = np.convolve(metric, np.ones(self.ofdm.CP)/self.ofdm.CP)
+        diff = np.diff(metric)
+
+        metric = ((diff[:-1] * diff[1:]) <= 0) * (metric[1:-1] > 0.5) * 1 # zero crossings in metric
+
+        ignore_window = np.ones(self.ofdm.CP + self.ofdm.K)
+        ignore_window[-1] = 0
+
+        ignore = np.convolve(metric, ignore_window, mode="valid")
+        ignore = np.pad(ignore, (self.ofdm.CP + self.ofdm.K, 0), mode="constant", constant_values=1)[:-1]
+        metric = metric * (ignore == 0)
+
+        return metric
+
     def cox_preamble(self):
         cox_freqs = self.ofdm.random_4psk()
         cox_freqs[::2] = 0
@@ -155,11 +140,15 @@ class SchmidlCox(App):
         self.sdrman.rebuild_tx_buffer()
         
         samples = self.cox_preamble()
+        samples_freqs = self.ofdm.random_4psk()
+        samples_freqs[1:] = 0
+        samples = np.hstack([samples, self.ofdm.modulate(samples_freqs) * 20])
         samples = np.pad(samples, txnullpad)
 
-        samples += (np.random.rand(len(samples)) + 1j*np.random.rand(len(samples))-.5-.5j) / np.sqrt(2)
+        #samples += (np.random.rand(len(samples)) + 1j*np.random.rand(len(samples))-.5-.5j) * 0.5
 
         metric, P, R = self.calc_metric(samples)
+        sync = self.sync_from_metric(metric)
         """
         L = self.ofdm.K//2
         metric = samples * (np.pad(samples, (0,L))[L:]).conj()
@@ -172,9 +161,10 @@ class SchmidlCox(App):
 
 
         self.tx_frame_iq_ax.plot(np.arange(len(samples)), np.abs(samples))
-        self.tx_frame_iq_ax.plot(np.arange(len(metric)), P)
-        self.tx_frame_iq_ax.plot(np.arange(len(metric)), R)
+        #self.tx_frame_iq_ax.plot(np.arange(len(metric)), P)
+        #self.tx_frame_iq_ax.plot(np.arange(len(metric)), R)
         self.tx_frame_iq_ax.plot(np.arange(len(metric)), metric)
+        self.tx_frame_iq_ax.plot(np.arange(len(sync)), sync)
 
         self.tx_frame_iq_ax.axvline(x=txnullpad, color='orange') # CP start
         self.tx_frame_iq_ax.axvline(x=txnullpad+self.ofdm.CP, color='orange') # preamble start

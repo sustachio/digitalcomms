@@ -70,6 +70,7 @@ class SchmidlCox(App):
         self.stop_tx()
 
         self.iq_ax.plot(np.arange(len(samples)), np.abs(samples))
+        self.iq_ax.plot(np.arange(len(samples)), (samples.real))
 
         metric, _, _ = self.calc_metric(samples)
         sync = self.sync_from_metric(metric)
@@ -79,7 +80,8 @@ class SchmidlCox(App):
         start_inds = np.flatnonzero(sync)
         frames = [] 
         for i in start_inds:
-            frames = np.hstack([frames, samples[i : i+2*self.ofdm.K]])
+            frames = np.hstack([frames, samples[i+self.ofdm.K:i+self.ofdm.K+2000]])
+        self.frame_iq_ax.plot(np.arange(len(frames)), frames)
 
         self.iq_ax.plot(np.arange(len(metric)), metric)
         self.iq_ax.plot(np.arange(len(sync)), sync)
@@ -119,11 +121,11 @@ class SchmidlCox(App):
 
         metric = ((diff[:-1] * diff[1:]) <= 0) * (metric[1:-1] > 0.5) * 1 # zero crossings in metric
 
-        ignore_window = np.ones(self.ofdm.CP + self.ofdm.K)
+        ignore_window = np.ones(self.ofdm.CP + self.ofdm.K + 2000)
         ignore_window[-1] = 0
 
         ignore = np.convolve(metric, ignore_window, mode="valid")
-        ignore = np.pad(ignore, (self.ofdm.CP + self.ofdm.K, 0), mode="constant", constant_values=1)[:-1]
+        ignore = np.pad(ignore, (self.ofdm.CP + self.ofdm.K + 2000, 0), mode="constant", constant_values=1)[:-1]
         metric = metric * (ignore == 0)
 
         return metric
@@ -140,9 +142,9 @@ class SchmidlCox(App):
         self.sdrman.rebuild_tx_buffer()
         
         samples = self.cox_preamble()
-        samples_freqs = self.ofdm.random_4psk()
-        samples_freqs[1:] = 0
-        samples = np.hstack([samples, self.ofdm.modulate(samples_freqs) * 20])
+        t = np.arange(2000)/100
+        samples2 = 2*np.exp(2.0j*np.pi*t)
+        samples = np.hstack([samples, samples2])
         samples = np.pad(samples, txnullpad)
 
         #samples += (np.random.rand(len(samples)) + 1j*np.random.rand(len(samples))-.5-.5j) * 0.5
@@ -161,6 +163,7 @@ class SchmidlCox(App):
 
 
         self.tx_frame_iq_ax.plot(np.arange(len(samples)), np.abs(samples))
+        self.tx_frame_iq_ax.plot(np.arange(len(samples)), (samples.real))
         #self.tx_frame_iq_ax.plot(np.arange(len(metric)), P)
         #self.tx_frame_iq_ax.plot(np.arange(len(metric)), R)
         self.tx_frame_iq_ax.plot(np.arange(len(metric)), metric)

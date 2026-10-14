@@ -3,7 +3,7 @@ import adi
 import matplotlib.pyplot as plt
 from scipy import signal
 import time
-from apps.app_parent import App
+from apps.app_parent import *
 
 fs = 1e6
 Nsymbols = 10
@@ -13,6 +13,9 @@ preamble_length = 5
 class FrameSync(App):
     def __init__(self, sdrman, sdrplusman, gui):
         super().__init__(sdrman, sdrplusman, gui)
+        self.name = "Frame Syncronization"
+        self.description = "Correlate PSK with known preamble, same tx/rx"
+        self.gui_elements = [GUIButton("Start", self.start)]
 
         self.preamble_symbols = np.random.randint(0, 4, preamble_length)
 

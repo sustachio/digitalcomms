@@ -4,7 +4,7 @@ import adi
 import matplotlib.pyplot as plt
 from scipy import signal, fft
 import time
-from apps.app_parent import App
+from apps.app_parent import *
 
 fs = 1e6
 
@@ -42,6 +42,9 @@ class OFDM:
 class SchmidlCox(App):
     def __init__(self, sdrman, sdrplusman, gui):
         super().__init__(sdrman, sdrplusman, gui)
+        self.name = "Schimdl Cox Time Sync"
+        self.description = "Frame syncronization and coarse frequency estimation using a self repeating preamble"
+        self.gui_elements = [GUIButton("Start", self.start)]
 
         self.iq_ax            = self.new_plot("rx", "Raw I/Q", ybounds=(-100, 100))
         self.constellation_ax = self.new_plot("rx", "I/Q Constellation", ybounds=(-100, 100), xbounds=(-100,100))
@@ -50,7 +53,6 @@ class SchmidlCox(App):
         self.tx_fft_ax        = self.new_plot("tx", "FFT", ybounds=(-30, 0))
 
         self.ofdm = OFDM(1024, 600, 128)
-
 
     def start(self):
         self.reset_plots()

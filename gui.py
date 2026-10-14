@@ -12,9 +12,11 @@ import numpy as np
 
 from PIL import Image, ImageTk
 
+from apps.app_parent import App, GUIText, GUIButton, GUICheckbox
+
 
 class GUI:
-    def __init__(self):
+    def __init__(self, tx_gain, rx_gain):
       """
       exposed:
       self.rx_controls : RXControl
@@ -60,9 +62,9 @@ class GUI:
       main_frame.columnconfigure(1, weight=6)
 
       # controls
-      self.rx_controls = RXControl(self, main_frame)
+      self.rx_controls = RXControl(self, main_frame, rx_gain)
       self.rx_controls.grid(row=0, column=2, sticky="nsew")
-      self.tx_controls = TXControl(self, main_frame)
+      self.tx_controls = TXControl(self, main_frame, tx_gain)
       self.tx_controls.grid(row=1, column=2, sticky="nsew")
       main_frame.columnconfigure(2, weight=1)
 
@@ -180,7 +182,7 @@ class TXGraphs(HPlots):
 
 
 class RXControl(ResizingFrame):
-  def __init__(self, gui, parent,
+  def __init__(self, gui, parent, rx_gain=55,
     live_rx_callback         = lambda a : None, # f(bool checked)
     single_rx_callback       = lambda   : None, # f()
     set_manaul_gain_callback = lambda a : None, # f(str val_db)
@@ -224,8 +226,8 @@ class RXControl(ResizingFrame):
     rx_gain_frame = ttk.Frame(self)
     rx_manual_gain_label = ttk.Label(rx_gain_frame, text="Manual RX Gain (dB)")
     rx_manual_gain_label.pack(side="left")
-    rx_gain_slider = Scale(rx_gain_frame, from_=0, to=74, orient=HORIZONTAL, command=lambda a : self.set_manaul_gain_callback(a))
-    rx_gain_slider.set(50)
+    rx_gain_slider = Scale(rx_gain_frame, from_=0, to=70, orient=HORIZONTAL, command=lambda a : self.set_manaul_gain_callback(a))
+    rx_gain_slider.set(rx_gain)
     rx_gain_slider.pack(side="left")
 
     selected_agc_mode = StringVar()
@@ -258,7 +260,7 @@ class RXControl(ResizingFrame):
     ttk.Label(self, textvariable=self.measured_data_rate_percent).pack(anchor="w")
 
 class TXControl(ResizingFrame):
-  def __init__(self, gui, parent,
+  def __init__(self, gui, parent, tx_gain=-20,
     tx_enable_callback     = lambda a : None, # f(bool checked)
     set_gain_callback      = lambda a : None, # f(str val)
     test_cw_check_callback = lambda a : None, # f(bool checked)
@@ -293,7 +295,7 @@ class TXControl(ResizingFrame):
     tx_gain_frame.pack(anchor="w")
     ttk.Label(tx_gain_frame, text="TX Gain (dB)").pack(side="left")
     tx_gain_slider = Scale(tx_gain_frame, from_=-90, to=0, orient=HORIZONTAL, command=lambda a: self.set_gain_callback(a))
-    tx_gain_slider.set(-20)
+    tx_gain_slider.set(tx_gain)
     tx_gain_slider.pack(side="left")
 
     ttk.Separator(self, orient=HORIZONTAL).pack(fill="x", pady=3)
@@ -320,30 +322,22 @@ class TXControl(ResizingFrame):
 class CommsControl(ResizingFrame):
   def __init__(self, gui, parent):
     super().__init__(parent)
+    self.gui = gui
+
+    self.app_control_variables = [] # checkboxes checked, numeric values, etc
 
     ############ ADD APPS 1
     self.sync1_callback = lambda : None
     self.clear_graphs = lambda : None
     self.frame_sync_callback = lambda : None
-    self.cox_callback = lambda : None
 
     self.config(relief="ridge", padding=(10,10,10,10))
 
     ttk.Label(self, text="Comms control", font=gui.bu_font).pack(anchor="w")
-
     ttk.Button(self, text="Clear Graphs", command=lambda : self.clear_graphs()).pack(anchor="w")
 
-    ############ ADD APPS 2
-    ttk.Label(self, text="Coarse frequency syncronization", font=gui.u_font).pack(anchor="w")
-    ttk.Button(self, text="Sync 1", command=lambda : self.sync1_callback()).pack(anchor="w")
-
-    ttk.Label(self, text="Frame Syncronization", font=gui.u_font).pack(anchor="w")
-    ttk.Label(self, text="Correlate PSK with known preamble, same tx/rx", wraplength=400).pack(anchor="w")
-    ttk.Button(self, text="Frame Sync", command=lambda : self.frame_sync_callback()).pack(anchor="w")
-
-    ttk.Label(self, text="Schmidl Cox", font=gui.u_font).pack(anchor="w")
-    ttk.Label(self, text="Frame syncronization and coarse frequency estimation using a self repeating preamble", wraplength=400).pack(anchor="w")
-    ttk.Button(self, text="Schmidl Cox", command=lambda : self.cox_callback()).pack(anchor="w")
+    #ttk.Label(self, text="Coarse frequency syncronization", font=gui.u_font).pack(anchor="w")
+    #ttk.Button(self, text="Sync 1", command=lambda : self.sync1_callback()).pack(anchor="w")
 
     # footer
     meowl = Image.open("images/meowl.png")
@@ -355,6 +349,33 @@ class CommsControl(ResizingFrame):
 
     ttk.Label(self, text="Made with <3 2026") \
         .pack(side="bottom")
+
+  # app from app_parent.py
+  def add_app(self, app):
+    ttk.Label(self, text=app.name, font=self.gui.u_font).pack(anchor="w")
+    ttk.Label(self, text=app.description, wraplength=400).pack(anchor="w")
+
+    for gui_element in app.gui_elements:
+      if isinstance(gui_element, GUIText):
+        ttk.Label(self, text=gui_element.text, wraplength=300).pack(anchor="w")
+
+      elif isinstance(gui_element, GUIButton):
+        ttk.Button(self, text=gui_element.text, command=lambda : gui_element.callback()).pack(anchor="w")
+
+      elif isinstance(gui_element, GUICheckbox):
+        self.app_control_variables.append(BooleanVar(value=False))
+
+        ttk.Checkbutton(self, 
+                        text=gui_element.text, 
+                        variable=self.app_control_variables, 
+                        command=lambda checked : (gui_element.callback_checked() if checked else gui_element.callback_unchecked())
+                       ).pack(anchor="w")
+        ttk.Button(self, text=gui_element.text, command=lambda : gui_element.callback()).pack(anchor="w")
+
+      else:
+        print("unknown app gui element " + dir(gui_element))
+
+
  
 
 if __name__ == "__main__":

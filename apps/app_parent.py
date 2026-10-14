@@ -1,7 +1,28 @@
 import matplotlib.pyplot as plt
 
+class GUIButton:
+    def __init__(self, text, callback):
+        self.text = text
+        self.callback = callback
+
+class GUIText:
+    def __init__(self, text):
+        self.text = text
+
+class GUICheckbox:
+    def __init__(self, text, callback_checked, callback_unchecked):
+        self.text = text
+        self.callback_checked = callback_checked
+        self.callback_unchecked = callback_unchecked
+
 class App:
     def __init__(self, sdrman, sdrplusman, gui):
+        # define pls
+        self.name = "New App OwO"
+        self.description = "Describe me pls >n<"
+        self.gui_elements = [] # GUIButton, GUIText
+
+        # internal
         self.sdrman = sdrman
         self.sdrplusman = sdrplusman
         self.gui = gui
@@ -9,7 +30,8 @@ class App:
         self.axs = []
         self.figs = []
         self.ax_canvases = []
-        self.locations = [] # rx or tx
+        self.locations = [] # "rx" or "tx", in same order as figs, ik it's dumb
+
 
     def new_plot(self, location, title, ybounds=(0,0), xbounds=(0,0)):
         fig, ax = plt.subplots(figsize=(3, 3))

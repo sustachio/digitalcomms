@@ -92,7 +92,7 @@ sdrplusman  = SDRManager("ip:10.3.33.215") # plus
 #sdrman = SDRManager("ip:169.254.12.16") # plus
 
 ################# GUI CONTROLS ###############
-gui = GUI()
+gui = GUI(rx_gain=60, tx_gain=-20)
 
 def set_agc_mode(mode):
     if   mode == "Manual":      sdrman.gain_control_mode_chan0 = "manual"
@@ -138,24 +138,23 @@ def test_cw(checked):
 gui.tx_controls.test_cw_check_callback = test_cw
 gui.tx_controls.set_cw_offset_callback = cw_test.set_freq
 
-############### ADD APPS 3
 # live rx
 live_rx = LiveRX(sdrplusman, gui)
 gui.rx_controls.live_rx_callback   = lambda checked : (live_rx.start() if checked else live_rx.stop())
 gui.rx_controls.single_rx_callback = lambda : live_rx.single_rx()
 
-# sync 1
-sync1 = Sync1(sdrman, gui)
-gui.comms_control.sync1_callback = sync1.start
+# sync 1 (not using, did not use App properly)
+#sync1 = Sync1(sdrman, gui)
+#gui.comms_control.sync1_callback = sync1.start
 #sync1.start()
 
 # frame sync
 frame_sync = FrameSync(sdrman, sdrplusman, gui)
-gui.comms_control.frame_sync_callback = frame_sync.start
+gui.comms_control.add_app(frame_sync)
 
 # schmidl cox
 cox = SchmidlCox(sdrman, sdrplusman, gui)
-gui.comms_control.cox_callback = cox.start
+gui.comms_control.add_app(cox)
 
 cox.start()
 gui.root.mainloop()

@@ -1,4 +1,3 @@
-
 import numpy as np
 import adi
 import matplotlib.pyplot as plt
@@ -67,7 +66,7 @@ class SchmidlCox(App):
             self.sdrman.sdr.rx()
 
         t = np.arange(self.sdrman.rx_buffer_size)/fs
-        samples = self.sdrman.sdr.rx() * np.exp(-2.0j*np.pi*5000*t)
+        samples = self.sdrman.sdr.rx() #* np.exp(-2.0j*np.pi*5000*t)
 
         self.stop_tx()
 
@@ -178,7 +177,7 @@ class SchmidlCox(App):
         samples = np.pad(samples, spacepad_len)
 
         t = np.arange(len(samples))/fs - spacepad_len/fs
-        samples *= 0.5*np.exp(2.0j*np.pi*5000*t)
+        samples *= 0.5#*np.exp(2.0j*np.pi*5000*t)
         samples *= 2**14
 
         # plot fft

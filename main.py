@@ -8,6 +8,7 @@ from apps.liverx import LiveRX
 from apps.sync1  import Sync1
 from apps.framesync  import FrameSync
 from apps.schmidl_cox  import SchmidlCox
+from apps.synced_qam  import SyncedQAM
 
 sample_rate = 1e6 # Hz
 center_freq = 915e6 # Hz
@@ -87,7 +88,7 @@ def rx_plot():
 
 # iio_info -u "ip:169.254.12.16" -s
 sdrman      = SDRManager("ip:192.168.2.1") # reg
-sdrplusman  = SDRManager("ip:10.3.33.215") # plus
+sdrplusman  = SDRManager("ip:10.3.33.179") # plus
 #sdrman = sdrplusman
 #sdrman = SDRManager("ip:169.254.12.16") # plus
 
@@ -138,23 +139,18 @@ def test_cw(checked):
 gui.tx_controls.test_cw_check_callback = test_cw
 gui.tx_controls.set_cw_offset_callback = cw_test.set_freq
 
-# live rx
 live_rx = LiveRX(sdrplusman, gui)
 gui.rx_controls.live_rx_callback   = lambda checked : (live_rx.start() if checked else live_rx.stop())
 gui.rx_controls.single_rx_callback = lambda : live_rx.single_rx()
 
-# sync 1 (not using, did not use App properly)
-#sync1 = Sync1(sdrman, gui)
-#gui.comms_control.sync1_callback = sync1.start
-#sync1.start()
-
-# frame sync
 frame_sync = FrameSync(sdrman, sdrplusman, gui)
 gui.comms_control.add_app(frame_sync)
 
-# schmidl cox
 cox = SchmidlCox(sdrman, sdrplusman, gui)
 gui.comms_control.add_app(cox)
 
-cox.start()
+qam = SyncedQAM(sdrman, sdrplusman, gui)
+gui.comms_control.add_app(qam)
+
+qam.start()
 gui.root.mainloop()

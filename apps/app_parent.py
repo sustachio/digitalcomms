@@ -1,4 +1,6 @@
 import matplotlib.pyplot as plt
+import numpy as np
+from scipy import signal, fft
 
 class GUIButton:
     def __init__(self, text, callback):
@@ -73,4 +75,13 @@ class App:
     def draw_plots(self):
         for canvas in self.ax_canvases:
             canvas.draw_idle()
+
+    def fft_graph(self, samples, fs):
+        psd = np.abs(np.fft.fftshift(np.fft.fft(samples)))**2
+        psd_dB = 10*np.log10(psd+1e-6)
+        fft_f = np.linspace(fs/-2, fs/2, len(psd_dB))
+        psd_dB -= np.max(psd_dB)
+
+        return fft_f, psd_dB
+
 

@@ -18,7 +18,7 @@ class OFDM:
 
         offset = int((self.K-self.Kon)/2)
         freqs = np.pad(qam, (offset + (1 if (self.K-self.Kon)%2==1 else 0), offset))
-        freqs = np.fft.fftshift(freqs)
+        #freqs = np.fft.fftshift(freqs)
         signal = np.fft.ifft(freqs) * np.sqrt(self.K)
         
         if self.CP > 0:
@@ -31,10 +31,9 @@ class OFDM:
 
         offset = int((self.K-self.Kon)/2)
         freqs = np.fft.fft(samples)
-        freqs[0:offset] = 0
-        freqs[-(offset + (1 if (self.K-self.Kon)%2==1 else 0)):-1] = 0
-        freqs[-1] = 0
-        freqs = np.fft.fftshift(freqs)
+        freqs = freqs[offset : offset + self.Kon]
+        #freqs = np.fft.fftshift(freqs)
+        #freqs[offset : offset + self.Kon] += 50
 
         return freqs
 
@@ -81,7 +80,7 @@ class SyncedQAM(App):
         self.iq_ax.plot(np.arange(len(samples)), np.abs(samples))
         self.iq_ax.plot(np.arange(len(samples)), (samples.real))
 
-        metric = self.calc_metric(samples)
+        metric, P = self.calc_metric(samples)
         sync = self.sync_from_metric(metric)
 
         # extract frames
@@ -92,13 +91,16 @@ class SyncedQAM(App):
         frame_demod = self.ofdm.demodulate(frame)
         frame_demod = frame_demod/np.max(np.abs(frame_demod)) * 50
 
-        self.frame_iq_ax.plot(np.arange(len(frame_demod)), frame_demod.real)
-        self.frame_iq_ax.plot(np.arange(len(frame_demod)), frame_demod.imag)
+        self.frame_iq_ax.plot(np.arange(len(frame_demod)), np.abs(frame_demod))
+        #self.frame_iq_ax.plot(np.arange(len(frame_demod)), frame_demod.imag)
         #self.frame_iq_ax.plot(np.arange(len(frame)), frame.real)
         # plot
         metric *= 50
         sync *= 50
+        P *= 50
         self.iq_ax.plot(np.arange(len(metric)), metric)
+        #self.iq_ax.plot(np.arange(len(P)), P.real)
+        #self.iq_ax.plot(np.arange(len(P)), P.imag)
         self.iq_ax.plot(np.arange(len(sync)), sync)
         self.constellation_ax.scatter(frame_demod.real, frame_demod.imag)
 
@@ -125,10 +127,10 @@ class SyncedQAM(App):
 
         # normalize
         metric = np.abs(metric) / (np.percentile(np.abs(metric), 99) + 1e-9) # percintile instead of max to prevent outliers
-        P = np.abs(P) / np.max(np.abs(P) + 1e-9)
+        P = P / np.max(np.abs(P) + 1e-9)
         R = np.abs(R) / np.max(np.abs(R) + 1e-9)
 
-        return metric
+        return metric, P
 
     def sync_from_metric(self, metric):
         metric = np.convolve(metric, np.ones(self.ofdm.CP)/self.ofdm.CP)
@@ -162,8 +164,12 @@ class SyncedQAM(App):
         data += np.exp(2.0j*2*np.pi*t) * np.exp(1)
         data_freqs = np.zeros(self.ofdm.Kon, dtype=complex)
         data_freqs = self.ofdm.random_4psk()
-        data_freqs[4] = 1.0j
+        #data_freqs[4] = 1.0j
+        #data_freqs[0:-1] = 0
+        #data_freqs[100] = 1
+        #data_freqs[500] = -1
         #data_freqs[7] = 1.0
+        data_freqs[100] = 1.0
         data = self.ofdm.modulate(data_freqs)
         samples = np.hstack([preamble, data])
         samples = np.pad(samples, txnullpad)

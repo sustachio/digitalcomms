@@ -1,3 +1,6 @@
+## IDEA: P angles seem to be off by exatly pi, subtract or figure out y
+
+
 import numpy as np
 import adi
 import matplotlib.pyplot as plt
@@ -31,7 +34,7 @@ class OFDM:
 
         offset = int((self.K-self.Kon)/2)
         freqs = np.fft.fft(samples)
-        freqs = freqs[offset : offset + self.Kon]
+        #freqs = freqs[offset : offset + self.Kon]
         #freqs = np.fft.fftshift(freqs)
         #freqs[offset : offset + self.Kon] += 50
 
@@ -52,9 +55,9 @@ class SyncedQAM(App):
         self.description = "QAM modulation/demodualtion with schmidl&cox syncing and channel correction"
         self.gui_elements = [GUIButton("Start", self.start)]
 
-        self.iq_ax            = self.new_plot("rx", "Raw I/Q", ybounds=(-100, 100))
-        self.constellation_ax = self.new_plot("rx", "I/Q Constellation", ybounds=(-100, 100), xbounds=(-100,100))
-        self.frame_iq_ax      = self.new_plot("rx", "Frame I/Q", ybounds=(-100, 100))
+        self.iq_ax            = self.new_plot("rx", "Raw I/Q", ybounds=(-2, 2))
+        self.constellation_ax = self.new_plot("rx", "I/Q Constellation", ybounds=(-2, 2), xbounds=(-2,2))
+        self.frame_iq_ax      = self.new_plot("rx", "Frame I/Q", ybounds=(-2, 2))
         self.tx_frame_iq_ax   = self.new_plot("tx", "Frame I/Q", ybounds=(-3, 3))
         self.tx_fft_ax        = self.new_plot("tx", "FFT", ybounds=(-30, 0))
 
@@ -74,34 +77,57 @@ class SyncedQAM(App):
 
         t = np.arange(self.sdrman.rx_buffer_size)/fs
         samples = self.sdrman.sdr.rx()
+        samples = samples * np.exp(-2.0j*np.pi*300*t)
+
+        # normalize
+        samples /= (np.percentile(np.abs(samples), 99) + 1e-9)
 
         self.stop_tx()
 
-        self.iq_ax.plot(np.arange(len(samples)), np.abs(samples))
+        # calculate frame start
         self.iq_ax.plot(np.arange(len(samples)), (samples.real))
+        self.iq_ax.plot(np.arange(len(samples)), (samples.imag))
 
         metric, P = self.calc_metric(samples)
         sync = self.sync_from_metric(metric)
 
-        # extract frames
         start_inds = np.flatnonzero(sync)
-        i = start_inds[1]
-        frame = samples[i+self.ofdm.K+self.ofdm.CP : i+2*self.ofdm.K+self.ofdm.CP]
+        frame_start = start_inds[1]
 
-        frame_demod = self.ofdm.demodulate(frame)
-        frame_demod = frame_demod/np.max(np.abs(frame_demod)) * 50
+        self.iq_ax.plot(np.arange(len(metric)), np.angle(P))
+        self.iq_ax.axvline(x=frame_start, color='red')
+        #self.iq_ax.plot(np.arange(len(metric)), metric)
+        #self.iq_ax.plot(np.arange(len(sync)), sync)
 
-        self.frame_iq_ax.plot(np.arange(len(frame_demod)), np.abs(frame_demod))
-        #self.frame_iq_ax.plot(np.arange(len(frame_demod)), frame_demod.imag)
+        # extract frames
+
+        frame = samples[frame_start+self.ofdm.K+self.ofdm.CP : frame_start+2*self.ofdm.K+self.ofdm.CP]
+        frame /= (np.percentile(np.abs(frame), 99) + 1e-9)
+        self.frame_iq_ax.plot(np.arange(len(frame)), np.angle(frame) / np.pi)
+
+        #self.frame_iq_ax.plot(np.arange(len(frame)), np.angle(frame) / np.pi)
+
+        # CFO correction
+        #offset = np.angle(P[frame_start])/(np.pi * self.ofdm.K)
+        offset = np.angle(P[frame_start])/(np.pi * self.ofdm.K)
+        cfo_correction = np.exp(-2.0j * np.pi * offset * np.arange(self.ofdm.K))
+
+        frame = frame * cfo_correction
+
+        # phase correction
+        phase = np.average(frame)
+        phase = phase / (np.abs(phase) + 1e-9)
+        frame = frame * np.conj(phase)
+
+        self.frame_iq_ax.plot(np.arange(len(frame)), np.angle(cfo_correction)/ (np.pi))
+        self.frame_iq_ax.axhline(y=(np.angle(P[frame_start]) / (np.pi)), color='red')
+
         #self.frame_iq_ax.plot(np.arange(len(frame)), frame.real)
-        # plot
-        metric *= 50
-        sync *= 50
-        P *= 50
-        self.iq_ax.plot(np.arange(len(metric)), metric)
-        #self.iq_ax.plot(np.arange(len(P)), P.real)
-        #self.iq_ax.plot(np.arange(len(P)), P.imag)
-        self.iq_ax.plot(np.arange(len(sync)), sync)
+        #self.frame_iq_ax.plot(np.arange(len(frame)), frame.imag)
+
+        # demodulate frame
+        frame_demod = self.ofdm.demodulate(frame)
+        frame_demod = frame_demod/np.max(np.abs(frame_demod))
         self.constellation_ax.scatter(frame_demod.real, frame_demod.imag)
 
         self.draw_plots()
@@ -171,14 +197,20 @@ class SyncedQAM(App):
         #data_freqs[7] = 1.0
         data_freqs[100] = 1.0
         data = self.ofdm.modulate(data_freqs)
+        data = np.repeat(1, self.ofdm.K)
         samples = np.hstack([preamble, data])
         samples = np.pad(samples, txnullpad)
+
+        t = np.arange(len(samples))/fs
+        samples *= np.exp(2.0j*np.pi*300*t)
+        metric, P = self.calc_metric(samples)
 
         #samples += (np.random.rand(len(samples)) + 1j*np.random.rand(len(samples))-.5-.5j) * 0.5
 
         #self.tx_frame_iq_ax.plot(np.arange(len(samples)), np.abs(samples))
         self.tx_frame_iq_ax.plot(np.arange(len(samples)), (samples.real))
         self.tx_frame_iq_ax.plot(np.arange(len(samples)), (samples.imag))
+        self.tx_frame_iq_ax.plot(np.arange(len(P)), (np.angle(P)))
 
         self.tx_frame_iq_ax.axvline(x=txnullpad, color='orange') # CP start
         self.tx_frame_iq_ax.axvline(x=txnullpad+self.ofdm.CP, color='orange') # preamble start
@@ -189,6 +221,8 @@ class SyncedQAM(App):
         self.tx_fft_ax.plot(fft_f, psd_dB)
 
         samples *= 2**13
+        t = np.arange(len(samples))/fs
+        samples *= np.exp(2.0j*np.pi*300*t)
         self.sdrman.cyclic_tx(samples)
 
     def stop_tx(self):

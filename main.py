@@ -30,7 +30,7 @@ class SDRManager:
         self.tx_cyclic_buffer_samples = []
 
         self.rx_lo = int(center_freq)
-        self.rx_rf_bandwidth = int(sample_rate)
+        self.rx_rf_bandwidth = int(int(sample_rate) *2)
         self.rx_buffer_size = num_samps
         self.gain_control_mode_chan0 = 'manual'
         self.rx_hardwaregain_chan0 = 50 # 0 - 70
@@ -88,7 +88,7 @@ def rx_plot():
 
 # iio_info -u "ip:169.254.12.16" -s
 sdrman      = SDRManager("ip:192.168.2.1") # reg
-sdrplusman  = SDRManager("ip:10.3.33.162") # plus
+sdrplusman  = SDRManager("ip:10.3.33.175") # plus
 #sdrman = sdrplusman
 #sdrman = SDRManager("ip:169.254.12.16") # plus
 

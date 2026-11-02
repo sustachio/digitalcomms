@@ -97,17 +97,11 @@ class SchmidlCox(App):
         P = samples * (np.pad(samples, (0,L))[L:]).conj() # x[n] * x[n-L].conj()
         P = np.convolve(P, np.ones(L), mode="valid") # sumnation
         R = np.convolve(np.square(np.abs(samples)), np.ones(L), mode="valid") # sig strength
-        #R = np.pad(R, (0,L))[:-L] # shift left L
+
         R = R[L:]  # shift left
         P = P[:-L] # cut to length
 
         metric = (np.abs(np.square(P))) / (np.square(R) + 1e-9)
-        #metric[0:L] = 0 # R cannot be determined here
-
-        # normalize
-        #metric = np.abs(metric) / (np.max(np.abs(metric)) + 1e-9)
-        #P = np.abs(P) / np.max(np.abs(P) + 1e-9)
-        #R = np.abs(R) / np.max(np.abs(R) + 1e-9)
 
         return metric, P, R
 

@@ -17,7 +17,7 @@ class OFDM:
         self.CP = CP
 
     def modulate(self, qam): # center of qam is 0hz
-        assert(len(qam) == self.Kon)
+        assert len(qam) == self.Kon
 
         offset = int((self.K-self.Kon)/2)
         freqs = np.pad(qam, (offset + (1 if (self.K-self.Kon)%2==1 else 0), offset))
@@ -38,12 +38,12 @@ class OFDM:
 
         return freqs
 
-    def random_4psk(self):
+    def random_carriers_4psk(self):
         qam = np.array([1+1j, 1-1j, -1+1j, -1-1j]) * np.sqrt(2)
         return np.random.choice(qam, size=self.Kon, replace=True)
 
-    def random_qam(self):
-        return (np.random.rand(self.Kon) + 1j*np.random.rand(self.Kon)) / np.sqrt(2)
+
+
 
 
 class SyncedQAM(App):
@@ -60,69 +60,48 @@ class SyncedQAM(App):
         self.tx_fft_ax        = self.new_plot("tx", "FFT", ybounds=(-30, 0))
 
         self.ofdm = OFDM(1024, 600, 128)
+        #self.ofdm = OFDM(100, 40, 20)
 
     def start(self):
         self.reset_plots()
 
-        self.sdrplusman.rx_buffer_size = 100000
-        self.sdrplusman.rebuild_rx_buffer()
-
         self.tx()
-
-        # clear buffer
-        for i in range(10):
-            self.sdrplusman.sdr.rx()
-
-        t = np.arange(self.sdrplusman.rx_buffer_size)/fs
-        samples = self.sdrplusman.sdr.rx()
-        samples = samples * np.exp(-2.0j*np.pi*3000*t)
-
-        # normalize
-        samples /= (np.percentile(np.abs(samples), 99) + 1e-9)
-
+        samples = self.rx()
         self.stop_tx()
 
         # calculate frame start
         #self.iq_ax.plot(np.arange(len(samples)), (samples.imag))
 
-        metric, P = self.calc_metric(samples)
-        sync = self.sync_from_metric(metric)
+        frame_start_inds, arg_P = self.frame_start_inds_and_arg_p(samples)
+        frame_start = frame_start_inds[1]
 
-        start_inds = np.flatnonzero(sync)
-        frame_start = start_inds[1]
 
-        self.iq_ax.plot(np.arange(len(metric)), np.angle(P), label="∠P")
+        full_frame, cox_preamble, cfo_preamble, data_frames = self.extract_frame_parts(samples, frame_start, 10)
+        data_frame = np.hstack(data_frames)
+
+        self.iq_ax.plot(np.arange(len(arg_P)), arg_P, label="∠P")
         self.iq_ax.plot(np.arange(len(samples)), (samples.real), label="real(s)")
         self.iq_ax.axvline(x=frame_start, color='red', label="frame start")
-        #self.iq_ax.plot(np.arange(len(metric)), metric)
-        #self.iq_ax.plot(np.arange(len(sync)), sync)
-
-        # extract frames
-
-        full_frame   = samples[frame_start : frame_start+(self.ofdm.K+self.ofdm.CP)*11]
-        full_frame_P = P[frame_start : frame_start+(self.ofdm.K+self.ofdm.CP)*11]
-        data_frame = samples[frame_start+self.ofdm.K+self.ofdm.CP : frame_start+(self.ofdm.K+self.ofdm.CP)*11]
-        full_frame /= (np.percentile(np.abs(full_frame), 99) + 1e-9)
-        data_frame /= (np.percentile(np.abs(full_frame), 99) + 1e-9)
 
         self.frame_iq_ax.plot(np.arange(len(full_frame)), np.abs(full_frame), label="|s|")
-        self.frame_iq_ax.plot(np.arange(len(full_frame)), np.angle(full_frame_P), label="∠P")
-
 
         self.frame_angle_ax.plot(np.arange(len(data_frame)), np.angle(data_frame), label="s_θ initial")
 
+        # coarse CFO correction
+        coarse_offset = (self.ofdm.K - self.ofdm.Kon) / 2 - np.argmax(np.fft.fft(cfo_preamble)) # expexted freq
+        #coarse_offset = np.argmax(np.fft.fft(cfo_preamble)) # expexted freq
+        cfo_correction = np.exp(2.0j * np.pi * coarse_offset / self.ofdm.K * np.arange(len(data_frame)))
+        print("coarse offset", coarse_offset)
 
-        #self.frame_iq_ax.plot(np.arange(len(frame)), np.angle(frame) / np.pi)
+        #data_frame = data_frame * cfo_correction
 
-        # CFO correction
-        #offset = np.angle(P[frame_start])/(np.pi * self.ofdm.K)
-        offset = np.angle(P[frame_start])/(np.pi * self.ofdm.K)
-        cfo_correction = np.exp(2.0j * np.pi * offset * np.arange(len(data_frame)))
-        print("estimated offset: ", offset * fs)
+        # fine CFO correction
+        fine_offset = arg_P[frame_start]/(np.pi * self.ofdm.K)
+        cfo_correction *= np.exp(2.0j * np.pi * fine_offset * np.arange(len(data_frame)))
+        print("fine offset: ", fine_offset * fs)
 
         data_frame = data_frame * cfo_correction
 
-        self.frame_angle_ax.plot(np.arange(len(data_frame)), np.angle(cfo_correction)/ (np.pi), label="θ estimate")
         #self.frame_angle_ax.axhline(y=(np.angle(P[frame_start]) / (np.pi)), color='red')
 
         # rough phase correction
@@ -130,7 +109,10 @@ class SyncedQAM(App):
         phase = phase / (np.abs(phase) + 1e-9)
         data_frame = data_frame * np.conj(phase)
 
+
+        self.frame_angle_ax.plot(np.arange(len(data_frame)), np.angle(cfo_correction)/ (np.pi), label="θ estimate")
         self.frame_angle_ax.plot(np.arange(len(data_frame)), np.angle(data_frame), label="s_θ corrected")
+
 
         #self.frame_iq_ax.plot(np.arange(len(frame)), frame.real)
         #self.frame_iq_ax.plot(np.arange(len(frame)), frame.imag)
@@ -148,31 +130,82 @@ class SyncedQAM(App):
         self.iq_ax.legend()
         self.draw_plots()
 
+    ################# ACTIONS ###################
+
+    def rx(self):
+        self.sdrplusman.rx_buffer_size = 100000
+        self.sdrplusman.rebuild_rx_buffer()
+
+        # clear buffer
+        for i in range(10):
+            self.sdrplusman.sdr.rx()
+
+        t = np.arange(self.sdrplusman.rx_buffer_size)/fs
+        samples = self.sdrplusman.sdr.rx()
+        samples = samples * np.exp(-2.0j*np.pi*3000*t)
+
+        # normalize
+        samples /= (np.percentile(np.abs(samples), 99) + 1e-9)
+
+        return samples
+
+    def tx(self):
+        self.sdrman.rebuild_tx_buffer()
+        
+        samples = self.preamble()
+        samples = np.hstack([samples, self.random_symbols_DC_4psk()])
+
+        txnullpad = 10000
+        samples = np.pad(samples, txnullpad)
+
+        t = np.arange(len(samples))/fs
+        metric, P, R = self.calc_metric(samples)
+
+        #samples += (np.random.rand(len(samples)) + 1j*np.random.rand(len(samples))-.5-.5j) * 0.5
+
+        ###### TX PLOTTING
+        self.tx_frame_iq_ax.plot(np.arange(len(samples)), (samples.real), label="real(s)")
+        self.tx_frame_iq_ax.plot(np.arange(len(samples)), (samples.imag), label="imag(s)")
+        self.tx_frame_iq_ax.plot(np.arange(len(P)), (np.angle(P)), label="∠P")
+        self.tx_frame_iq_ax.plot(np.arange(len(metric)), (np.angle(metric)), label="|metric|")
+
+        self.tx_frame_iq_ax.axvline(x=txnullpad, color='black') # CP start
+        self.tx_frame_iq_ax.axvline(x=txnullpad+self.ofdm.CP, color='black') # preamble start
+        self.tx_frame_iq_ax.axvline(x=txnullpad+self.ofdm.CP+self.ofdm.K, color='black') # cox preamble end
+        self.tx_frame_iq_ax.axvline(x=txnullpad+2*(self.ofdm.CP+self.ofdm.K), color='black') # cfo preamble end
+
+        # plot fft
+        fft_f, psd_dB = self.fft_graph(samples, fs)
+        self.tx_fft_ax.plot(fft_f, psd_dB)
+
+        samples *= np.exp(2.0j*np.pi*3000*t) # to allow for DC QAM signals
+        samples *= 2**13
+        t = np.arange(len(samples))/fs
+        self.sdrman.cyclic_tx(samples)
+
+    def stop_tx(self):
+        self.sdrman.stop_cyclic_tx()
+
+    ################## CALCULATIONS #######################
+
     def calc_metric(self, samples):
         L = self.ofdm.K//2
         P = samples * (np.pad(samples, (0,L))[L:]).conj() # x[n] * x[n-L].conj()
         P = np.convolve(P, np.ones(L), mode="valid") # sumnation
         R = np.convolve(np.square(np.abs(samples)), np.ones(L), mode="valid") # sig strength
-        R = np.pad(R, (0,L))[L:] # shift left L
+
+        R = R[L:]  # shift left
+        P = P[:-L] # cut to length
+
         metric = (np.abs(np.square(P))) / (np.square(R) + 1e-9)
 
-        # cutoff ends
-        P = P[:-L]
-        R = R[:-L]
-        metric = metric[:-L]
-
-        # normalize
-        metric = np.abs(metric) / (np.percentile(np.abs(metric), 99) + 1e-9) # percintile instead of max to prevent outliers
-        P = P / np.max(np.abs(P) + 1e-9)
-        R = np.abs(R) / np.max(np.abs(R) + 1e-9)
-
-        return metric, P
+        return metric, P, R
 
     def sync_from_metric(self, metric):
         metric = np.convolve(metric, np.ones(self.ofdm.CP)/self.ofdm.CP)
         diff = np.diff(metric)
 
-        metric = ((diff[:-1] * diff[1:]) <= 0) * (metric[1:-1] > 0.5) * 1 # zero crossings in metric
+        metric = ((diff[:-1] * diff[1:]) <= 0) * (metric[1:-1] > 0.75) * 1 # zero crossings in metric
 
         ignore_window = np.ones(self.ofdm.CP + self.ofdm.K + 2000)
         ignore_window[-1] = 0
@@ -183,51 +216,51 @@ class SyncedQAM(App):
 
         return metric
 
-    def cox_preamble(self):
-        cox_freqs = self.ofdm.random_4psk()
+    def frame_start_inds_and_arg_p(self, samples):
+        metric, P, R = self.calc_metric(samples)
+        sync = self.sync_from_metric(metric)
+
+        start_inds = np.flatnonzero(sync)
+
+        return start_inds, np.angle(P)
+ 
+
+    ##################### STRUCTURE #####################
+
+    def preamble(self):
+        # cox preamble for sync
+        cox_freqs = self.ofdm.random_carriers_4psk()
         cox_freqs[1::2] = 0
-        return self.ofdm.modulate(cox_freqs)
+        cox_preamble = self.ofdm.modulate(cox_freqs)
 
-    def tx(self):
-        txnullpad = 10000
+        # fixed pilot for carrier frequency offset estimation
+        cfo_freqs = np.zeros(self.ofdm.Kon)
+        cfo_freqs[0] = np.sqrt(self.ofdm.K) # lowest positive carrier
+        cfo_preamble = self.ofdm.modulate(cfo_freqs)
 
-        self.sdrman.rebuild_tx_buffer()
-        
-        preamble = self.cox_preamble()
-        samples = preamble
+        return np.hstack([cox_preamble, cfo_preamble])
 
-        #data_freqs = np.zeros(self.ofdm.Kon, dtype=complex)
-        #data_freqs = self.ofdm.random_4psk()
-        #data_freqs[100] = 1.0
-        #data = self.ofdm.modulate(data_freqs)
+    # dummy data
+    def random_symbols_DC_4psk(self):
+        samples = []
+
         for i in range(10):
             data = np.repeat([1+1j, 1-1j, -1+1j, -1-1j][i%4], self.ofdm.K + self.ofdm.CP)
             samples = np.hstack([samples, data])
 
-        samples = np.pad(samples, txnullpad)
+        return samples
 
-        t = np.arange(len(samples))/fs
-        samples *= np.exp(2.0j*np.pi*3000*t)
-        metric, P = self.calc_metric(samples)
+    def extract_frame_parts(self, samples, frame_start, data_symbols=10):
+        i = frame_start
+        K = self.ofdm.K
+        CP = self.ofdm.CP
 
-        #samples += (np.random.rand(len(samples)) + 1j*np.random.rand(len(samples))-.5-.5j) * 0.5
+        full_frame   = samples[i - CP     : i + K + (K + CP) * (data_symbols+1)] # plotting only
+        cox_preamble = samples[i          : i + K]
+        cfo_preamble = samples[i + K + CP : i + 2*K + CP]
 
-        #self.tx_frame_iq_ax.plot(np.arange(len(samples)), np.abs(samples))
-        self.tx_frame_iq_ax.plot(np.arange(len(samples)), (samples.real))
-        self.tx_frame_iq_ax.plot(np.arange(len(samples)), (samples.imag))
-        self.tx_frame_iq_ax.plot(np.arange(len(P)), (np.angle(P)))
+        data_frames = []
+        for j in range(data_symbols):
+            data_frames.append(samples[i + (2+j)*(K + CP) : i + (2+j)*(K + CP) + K])
 
-        self.tx_frame_iq_ax.axvline(x=txnullpad, color='orange') # CP start
-        self.tx_frame_iq_ax.axvline(x=txnullpad+self.ofdm.CP, color='orange') # preamble start
-        self.tx_frame_iq_ax.axvline(x=txnullpad+self.ofdm.CP+self.ofdm.K, color='orange') # preamble end
-
-        # plot fft
-        fft_f, psd_dB = self.fft_graph(samples, fs)
-        self.tx_fft_ax.plot(fft_f, psd_dB)
-
-        samples *= 2**13
-        t = np.arange(len(samples))/fs
-        self.sdrman.cyclic_tx(samples)
-
-    def stop_tx(self):
-        self.sdrman.stop_cyclic_tx()
+        return full_frame, cox_preamble, cfo_preamble, data_frames

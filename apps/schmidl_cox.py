@@ -45,9 +45,9 @@ class SchmidlCox(App):
         self.description = "Frame syncronization and coarse frequency estimation using a self repeating preamble"
         self.gui_elements = [GUIButton("Start", self.start)]
 
-        self.iq_ax            = self.new_plot("rx", "Raw I/Q", ybounds=(-100, 100))
-        self.constellation_ax = self.new_plot("rx", "I/Q Constellation", ybounds=(-100, 100), xbounds=(-100,100))
-        self.frame_iq_ax      = self.new_plot("rx", "Frame I/Q", ybounds=(-100, 100))
+        self.iq_ax            = self.new_plot("rx", "Raw I/Q", ybounds=(-2, 2))
+        self.constellation_ax = self.new_plot("rx", "I/Q Constellation", ybounds=(-2, 2), xbounds=(-2,2))
+        self.frame_iq_ax      = self.new_plot("rx", "Frame I/Q", ybounds=(-2, 2))
         self.tx_frame_iq_ax   = self.new_plot("tx", "Frame I/Q", ybounds=(-3, 3))
         self.tx_fft_ax        = self.new_plot("tx", "FFT", ybounds=(-30, 0))
 
@@ -56,63 +56,58 @@ class SchmidlCox(App):
     def start(self):
         self.reset_plots()
 
-        self.sdrman.rx_buffer_size = 100000
-        self.sdrman.rebuild_rx_buffer()
+        self.sdrplusman.rx_buffer_size = 100000
+        self.sdrplusman.rebuild_rx_buffer()
 
         self.tx()
 
         # clear buffer
         for i in range(10):
-            self.sdrman.sdr.rx()
+            self.sdrplusman.sdr.rx()
 
-        t = np.arange(self.sdrman.rx_buffer_size)/fs
-        samples = self.sdrman.sdr.rx() #* np.exp(-2.0j*np.pi*5000*t)
+        t = np.arange(self.sdrplusman.rx_buffer_size)/fs
+        samples = self.sdrplusman.sdr.rx() #* np.exp(-2.0j*np.pi*5000*t)
 
         self.stop_tx()
 
-        self.iq_ax.plot(np.arange(len(samples)), np.abs(samples))
-        self.iq_ax.plot(np.arange(len(samples)), (samples.real))
+        samples /= (np.percentile(np.abs(samples), 99) + 1e-9)
+        self.iq_ax.plot(np.arange(len(samples)), np.abs(samples), label="|s|")
+        self.iq_ax.plot(np.arange(len(samples)), (samples.real), label="real(s)")
 
-        metric, _, _ = self.calc_metric(samples)
+        metric, P, R = self.calc_metric(samples)
         sync = self.sync_from_metric(metric)
-        metric *= 50
-        sync *= 50
 
         start_inds = np.flatnonzero(sync)
         frames = [] 
         for i in start_inds:
-            frames = np.hstack([frames, samples[i+self.ofdm.K:i+self.ofdm.K+2000]])
+          frames = np.hstack([frames, samples[i+self.ofdm.K:i+self.ofdm.K+2000]])
+          #self.iq_ax.axvline(x=i, color='purple', label="sync")
         self.frame_iq_ax.plot(np.arange(len(frames)), frames)
 
-        self.iq_ax.plot(np.arange(len(metric)), metric)
-        self.iq_ax.plot(np.arange(len(sync)), sync)
-        self.constellation_ax.scatter(frames.real, frames.imag)
+        self.iq_ax.plot(np.arange(len(metric)), metric, label="M")
+        self.iq_ax.plot(np.arange(len(R)), R, label="R")
+        self.iq_ax.plot(np.arange(len(sync)), sync*100, label="sync")
+        self.constellation_ax.scatter(np.real(frames), np.imag(frames))
 
+        self.iq_ax.legend()
         self.draw_plots()
-
-    def generate_samples(self, symbols):
-        symbols = np.repeat(symbols, cycles_per_symbol)
-        samples = np.exp(1j*symbols * np.pi/2 + np.pi/4)
-
-        return samples
 
     def calc_metric(self, samples):
         L = self.ofdm.K//2
         P = samples * (np.pad(samples, (0,L))[L:]).conj() # x[n] * x[n-L].conj()
         P = np.convolve(P, np.ones(L), mode="valid") # sumnation
         R = np.convolve(np.square(np.abs(samples)), np.ones(L), mode="valid") # sig strength
-        R = np.pad(R, (0,L))[L:] # shift left L
-        metric = (np.abs(np.square(P))) / (np.square(R) + 1e-9)
+        #R = np.pad(R, (0,L))[:-L] # shift left L
+        R = R[L:]  # shift left
+        P = P[:-L] # cut to length
 
-        # cutoff ends
-        P = P[:-L]
-        R = R[:-L]
-        metric = metric[:-L]
+        metric = (np.abs(np.square(P))) / (np.square(R) + 1e-9)
+        #metric[0:L] = 0 # R cannot be determined here
 
         # normalize
-        metric = np.abs(metric) / (np.max(np.abs(metric)) + 1e-9)
-        P = np.abs(P) / np.max(np.abs(P) + 1e-9)
-        R = np.abs(R) / np.max(np.abs(R) + 1e-9)
+        #metric = np.abs(metric) / (np.max(np.abs(metric)) + 1e-9)
+        #P = np.abs(P) / np.max(np.abs(P) + 1e-9)
+        #R = np.abs(R) / np.max(np.abs(R) + 1e-9)
 
         return metric, P, R
 
@@ -120,7 +115,7 @@ class SchmidlCox(App):
         metric = np.convolve(metric, np.ones(self.ofdm.CP)/self.ofdm.CP)
         diff = np.diff(metric)
 
-        metric = ((diff[:-1] * diff[1:]) <= 0) * (metric[1:-1] > 0.5) * 1 # zero crossings in metric
+        metric = ((diff[:-1] * diff[1:]) <= 0) * (metric[1:-1] > 0.7) * 1 # zero crossings in metric
 
         ignore_window = np.ones(self.ofdm.CP + self.ofdm.K + 2000)
         ignore_window[-1] = 0
@@ -163,16 +158,17 @@ class SchmidlCox(App):
         """
 
 
-        self.tx_frame_iq_ax.plot(np.arange(len(samples)), np.abs(samples))
-        self.tx_frame_iq_ax.plot(np.arange(len(samples)), (samples.real))
+        self.tx_frame_iq_ax.plot(np.arange(len(samples)), np.abs(samples), label="|s|")
+        self.tx_frame_iq_ax.plot(np.arange(len(samples)), (samples.real), label="real(s)")
         #self.tx_frame_iq_ax.plot(np.arange(len(metric)), P)
         #self.tx_frame_iq_ax.plot(np.arange(len(metric)), R)
-        self.tx_frame_iq_ax.plot(np.arange(len(metric)), metric)
-        self.tx_frame_iq_ax.plot(np.arange(len(sync)), sync)
+        self.tx_frame_iq_ax.plot(np.arange(len(metric)), metric, label="M")
+        self.tx_frame_iq_ax.plot(np.arange(len(R)), R, label="R")
+        self.tx_frame_iq_ax.plot(np.arange(len(sync)), sync, label="sync")
 
-        self.tx_frame_iq_ax.axvline(x=txnullpad, color='orange') # CP start
-        self.tx_frame_iq_ax.axvline(x=txnullpad+self.ofdm.CP, color='orange') # preamble start
-        self.tx_frame_iq_ax.axvline(x=txnullpad+self.ofdm.CP+self.ofdm.K, color='orange') # preamble end
+        self.tx_frame_iq_ax.axvline(x=txnullpad, color='black') # CP start
+        self.tx_frame_iq_ax.axvline(x=txnullpad+self.ofdm.CP, color='black') # preamble start
+        self.tx_frame_iq_ax.axvline(x=txnullpad+self.ofdm.CP+self.ofdm.K, color='black') # preamble end
 
         samples = np.pad(samples, spacepad_len)
 
@@ -189,6 +185,7 @@ class SchmidlCox(App):
         self.tx_fft_ax.plot(fft_f, psd_dB)
         #self.tx_fft_ax.plot(np.arange(len(samples)), samples)
 
+        self.tx_frame_iq_ax.legend()
         self.sdrman.cyclic_tx(samples)
 
     def stop_tx(self):

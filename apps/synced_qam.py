@@ -64,17 +64,17 @@ class SyncedQAM(App):
     def start(self):
         self.reset_plots()
 
-        self.sdrman.rx_buffer_size = 100000
-        self.sdrman.rebuild_rx_buffer()
+        self.sdrplusman.rx_buffer_size = 100000
+        self.sdrplusman.rebuild_rx_buffer()
 
         self.tx()
 
         # clear buffer
         for i in range(10):
-            self.sdrman.sdr.rx()
+            self.sdrplusman.sdr.rx()
 
-        t = np.arange(self.sdrman.rx_buffer_size)/fs
-        samples = self.sdrman.sdr.rx()
+        t = np.arange(self.sdrplusman.rx_buffer_size)/fs
+        samples = self.sdrplusman.sdr.rx()
         samples = samples * np.exp(-2.0j*np.pi*3000*t)
 
         # normalize
@@ -83,8 +83,7 @@ class SyncedQAM(App):
         self.stop_tx()
 
         # calculate frame start
-        self.iq_ax.plot(np.arange(len(samples)), (samples.real))
-        self.iq_ax.plot(np.arange(len(samples)), (samples.imag))
+        #self.iq_ax.plot(np.arange(len(samples)), (samples.imag))
 
         metric, P = self.calc_metric(samples)
         sync = self.sync_from_metric(metric)
@@ -92,8 +91,9 @@ class SyncedQAM(App):
         start_inds = np.flatnonzero(sync)
         frame_start = start_inds[1]
 
-        self.iq_ax.plot(np.arange(len(metric)), np.angle(P))
-        self.iq_ax.axvline(x=frame_start, color='red')
+        self.iq_ax.plot(np.arange(len(metric)), np.angle(P), label="∠P")
+        self.iq_ax.plot(np.arange(len(samples)), (samples.real), label="real(s)")
+        self.iq_ax.axvline(x=frame_start, color='red', label="frame start")
         #self.iq_ax.plot(np.arange(len(metric)), metric)
         #self.iq_ax.plot(np.arange(len(sync)), sync)
 
@@ -109,7 +109,7 @@ class SyncedQAM(App):
         self.frame_iq_ax.plot(np.arange(len(full_frame)), np.angle(full_frame_P), label="∠P")
 
 
-        self.frame_angle_ax.plot(np.arange(len(data_frame)), np.angle(data_frame), label="θ_i")
+        self.frame_angle_ax.plot(np.arange(len(data_frame)), np.angle(data_frame), label="s_θ initial")
 
 
         #self.frame_iq_ax.plot(np.arange(len(frame)), np.angle(frame) / np.pi)
@@ -122,7 +122,7 @@ class SyncedQAM(App):
 
         data_frame = data_frame * cfo_correction
 
-        self.frame_angle_ax.plot(np.arange(len(data_frame)), np.angle(cfo_correction)/ (np.pi), label="θ_est")
+        self.frame_angle_ax.plot(np.arange(len(data_frame)), np.angle(cfo_correction)/ (np.pi), label="θ estimate")
         #self.frame_angle_ax.axhline(y=(np.angle(P[frame_start]) / (np.pi)), color='red')
 
         # rough phase correction
@@ -130,7 +130,7 @@ class SyncedQAM(App):
         phase = phase / (np.abs(phase) + 1e-9)
         data_frame = data_frame * np.conj(phase)
 
-        self.frame_angle_ax.plot(np.arange(len(data_frame)), np.angle(data_frame), label="θ_f")
+        self.frame_angle_ax.plot(np.arange(len(data_frame)), np.angle(data_frame), label="s_θ corrected")
 
         #self.frame_iq_ax.plot(np.arange(len(frame)), frame.real)
         #self.frame_iq_ax.plot(np.arange(len(frame)), frame.imag)
@@ -145,6 +145,7 @@ class SyncedQAM(App):
 
         self.frame_angle_ax.legend()
         self.frame_iq_ax.legend()
+        self.iq_ax.legend()
         self.draw_plots()
 
     def calc_metric(self, samples):

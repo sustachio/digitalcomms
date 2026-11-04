@@ -1,5 +1,22 @@
-## IDEA: P angles seem to be off by exatly pi, subtract or figure out y
-
+# ideas: find center of mass of preamble fft and determine offset from that
+# interpolate fft peaks or something?
+"""
+mag = np.abs(fft)
+# Find maximum FFT bin
+i = np.argmax(mag)
+# Number of points on either side of peak
+n = 5
+# Select points around peak
+x = np.arange(i-n, i+n+1)
+y = mag[x]
+# Fit a parabola (2nd degree polynomial)
+p = np.polyfit(x, y, 2)
+# Find vertex
+peak_bin = -p[1] / (2*p[0])
+# Convert bin to frequency
+f_peak = np.interp(peak_bin, np.arange(len(freq)), freq)
+print(f_peak)
+"""
 
 import numpy as np
 import adi
@@ -61,6 +78,8 @@ class SyncedQAM(App):
 
         self.ofdm = OFDM(1024, 600, 128)
         #self.ofdm = OFDM(100, 40, 20)
+
+        self.saved_cox_preamble = []
 
     def start(self):
         self.reset_plots()
@@ -232,6 +251,7 @@ class SyncedQAM(App):
         cox_freqs = self.ofdm.random_carriers_4psk()
         cox_freqs[1::2] = 0
         cox_preamble = self.ofdm.modulate(cox_freqs)
+        self.saved_cox_preamble = cox_preamble
 
         # fixed pilot for carrier frequency offset estimation
         cfo_freqs = np.zeros(self.ofdm.Kon)

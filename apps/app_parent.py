@@ -73,6 +73,9 @@ class App:
                 collection.remove()
 
     def draw_plots(self):
+        for ax in self.axs:
+            ax.legend()
+
         for canvas in self.ax_canvases:
             canvas.draw_idle()
 

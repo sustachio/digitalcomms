@@ -73,6 +73,7 @@ class SyncedQAM(App):
         self.iq_ax            = self.new_plot("rx", "Raw I/Q", ybounds=(-2, 2))
         self.frame_iq_ax      = self.new_plot("rx", "Frame I/Q", ybounds=(-np.pi, np.pi))
         self.frame_angle_ax   = self.new_plot("rx", "Frame Angle", ybounds=(-np.pi, np.pi))
+        self.cfo_est_ax       = self.new_plot("rx", "CFO Coarse Bin Estimate", ybounds=(-.1, 1.1))
         self.tx_frame_iq_ax   = self.new_plot("tx", "Frame I/Q", ybounds=(-3, 3))
         self.tx_fft_ax        = self.new_plot("tx", "FFT", ybounds=(-30, 0))
 
@@ -107,21 +108,32 @@ class SyncedQAM(App):
         self.frame_angle_ax.plot(np.arange(len(data_frame)), np.angle(data_frame), label="s_θ initial")
 
         # coarse CFO correction
-        coarse_offset = (self.ofdm.K - self.ofdm.Kon) / 2 - np.argmax(np.fft.fft(cfo_preamble)) # expexted freq
-        #coarse_offset = np.argmax(np.fft.fft(cfo_preamble)) # expexted freq
-        cfo_correction = np.exp(2.0j * np.pi * coarse_offset / self.ofdm.K * np.arange(len(data_frame)))
-        print("coarse offset", coarse_offset)
+        fft_mag = np.abs(np.fft.fft(cfo_preamble))
+        peak_bin = np.argmax(fft_mag)
+        n = 5 # points on either side
 
-        #data_frame = data_frame * cfo_correction
+        domain = np.arange(peak_bin-n, peak_bin+n+1)
+        y = fft_mag[domain]
+        y /= np.max(y)
+
+        p = np.polyfit(domain, y, 2)
+        peak_bin = -p[1] / (2*p[0]) # vertex
+        coarse_offset = round((self.ofdm.K - self.ofdm.Kon) / 2 - peak_bin)
+
+        fine_domain = np.arange(peak_bin-n,peak_bin+n+1,.1)
+        self.cfo_est_ax.plot(domain, y, label="fft")
+        self.cfo_est_ax.plot(fine_domain, p[0]*fine_domain**2+p[1]*fine_domain+p[2], label="est")
+        self.cfo_est_ax.axvline(x=peak_bin, color='red', label="vertex")
+
+        cfo_correction = np.exp(2.0j * np.pi * coarse_offset / self.ofdm.K * np.arange(len(data_frame)))
+        print("coarse offset: ", coarse_offset * fs, "Hz")
 
         # fine CFO correction
         fine_offset = arg_P[frame_start]/(np.pi * self.ofdm.K)
         cfo_correction *= np.exp(2.0j * np.pi * fine_offset * np.arange(len(data_frame)))
-        print("fine offset: ", fine_offset * fs)
+        print("fine offset: ", fine_offset * fs, "Hz")
 
         data_frame = data_frame * cfo_correction
-
-        #self.frame_angle_ax.axhline(y=(np.angle(P[frame_start]) / (np.pi)), color='red')
 
         # rough phase correction
         phase = np.average(data_frame)
@@ -132,10 +144,6 @@ class SyncedQAM(App):
         self.frame_angle_ax.plot(np.arange(len(data_frame)), np.angle(cfo_correction)/ (np.pi), label="θ estimate")
         self.frame_angle_ax.plot(np.arange(len(data_frame)), np.angle(data_frame), label="s_θ corrected")
 
-
-        #self.frame_iq_ax.plot(np.arange(len(frame)), frame.real)
-        #self.frame_iq_ax.plot(np.arange(len(frame)), frame.imag)
-
         # demodulate frame
         #frame_demod = self.ofdm.demodulate(frame)
         #frame_demod = frame_demod/np.max(np.abs(frame_demod))
@@ -144,9 +152,6 @@ class SyncedQAM(App):
         self.frame_iq_ax.plot(np.arange(len(data_frame)) + self.ofdm.CP + self.ofdm.K, data_frame.real, label="real(s)")
         self.frame_iq_ax.plot(np.arange(len(data_frame)) + self.ofdm.CP + self.ofdm.K, data_frame.imag, label="imag(s)")
 
-        self.frame_angle_ax.legend()
-        self.frame_iq_ax.legend()
-        self.iq_ax.legend()
         self.draw_plots()
 
     ################# ACTIONS ###################
@@ -265,7 +270,8 @@ class SyncedQAM(App):
         samples = []
 
         for i in range(10):
-            data = np.repeat([1+1j, 1-1j, -1+1j, -1-1j][i%4], self.ofdm.K + self.ofdm.CP)
+            #data = np.repeat([1+1j, 1-1j, -1+1j, -1-1j][i%4], self.ofdm.K + self.ofdm.CP)
+            data = np.repeat(1+1j, self.ofdm.K + self.ofdm.CP)
             samples = np.hstack([samples, data])
 
         return samples

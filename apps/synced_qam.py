@@ -96,8 +96,9 @@ class SyncedQAM(App):
         frame_start = frame_start_inds[1]
 
 
-        full_frame, cox_preamble, cfo_preamble, data_frames = self.extract_frame_parts(samples, frame_start, 10)
-        data_frame = np.hstack(data_frames)
+        full_frame, cox_preamble, cfo_preamble, data_frames, full_data = self.extract_frame_parts(samples, frame_start, 10)
+        #data_frame = np.hstack(data_frames)
+        data_frame = full_data
 
         self.iq_ax.plot(np.arange(len(arg_P)), arg_P, label="∠P")
         self.iq_ax.plot(np.arange(len(samples)), (samples.real), label="real(s)")
@@ -126,7 +127,7 @@ class SyncedQAM(App):
         self.cfo_est_ax.axvline(x=peak_bin, color='red', label="vertex")
 
         cfo_correction = np.exp(2.0j * np.pi * coarse_offset / self.ofdm.K * np.arange(len(data_frame)))
-        print("coarse offset: ", coarse_offset * fs, "Hz")
+        print("coarse offset: ", coarse_offset * fs, "todo: find unit")
 
         # fine CFO correction
         fine_offset = arg_P[frame_start]/(np.pi * self.ofdm.K)
@@ -270,10 +271,10 @@ class SyncedQAM(App):
         samples = []
 
         for i in range(10):
-            #data = np.repeat([1+1j, 1-1j, -1+1j, -1-1j][i%4], self.ofdm.K + self.ofdm.CP)
-            data = np.repeat(1+1j, self.ofdm.K + self.ofdm.CP)
+            data = np.repeat([1+1j, 1-1j, -1+1j, -1-1j][i%4], self.ofdm.K + self.ofdm.CP)
             samples = np.hstack([samples, data])
 
+        samples = np.repeat(1+1j, (self.ofdm.K + self.ofdm.CP) * 10)
         return samples
 
     def extract_frame_parts(self, samples, frame_start, data_symbols=10):
@@ -286,7 +287,9 @@ class SyncedQAM(App):
         cfo_preamble = samples[i + K + CP : i + 2*K + CP]
 
         data_frames = []
-        for j in range(data_symbols):
-            data_frames.append(samples[i + (2+j)*(K + CP) : i + (2+j)*(K + CP) + K])
+        for ii in range(data_symbols):
+            data_frames.append(samples[i + (2+ii)*(K + CP) : i + (2+ii)*(K + CP) + K])
 
-        return full_frame, cox_preamble, cfo_preamble, data_frames
+        full_data = samples[i + (2)*(K + CP) : i + (1+data_symbols)*(K + CP) + K]
+
+        return full_frame, cox_preamble, cfo_preamble, data_frames, full_data

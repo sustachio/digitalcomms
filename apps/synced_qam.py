@@ -1,23 +1,3 @@
-# ideas: find center of mass of preamble fft and determine offset from that
-# interpolate fft peaks or something?
-"""
-mag = np.abs(fft)
-# Find maximum FFT bin
-i = np.argmax(mag)
-# Number of points on either side of peak
-n = 5
-# Select points around peak
-x = np.arange(i-n, i+n+1)
-y = mag[x]
-# Fit a parabola (2nd degree polynomial)
-p = np.polyfit(x, y, 2)
-# Find vertex
-peak_bin = -p[1] / (2*p[0])
-# Convert bin to frequency
-f_peak = np.interp(peak_bin, np.arange(len(freq)), freq)
-print(f_peak)
-"""
-
 import numpy as np
 import adi
 import matplotlib.pyplot as plt
@@ -92,15 +72,15 @@ class SyncedQAM(App):
         # calculate frame start
         #self.iq_ax.plot(np.arange(len(samples)), (samples.imag))
 
-        frame_start_inds, arg_P = self.frame_start_inds_and_arg_p(samples)
+        frame_start_inds, P = self.frame_start_inds_and_p(samples)
         frame_start = frame_start_inds[1]
 
 
         full_frame, cox_preamble, cfo_preamble, data_frames, full_data = self.extract_frame_parts(samples, frame_start, 10)
-        #data_frame = np.hstack(data_frames)
-        data_frame = full_data
+        data_frame = np.hstack(data_frames)
+        #data_frame = full_data
 
-        self.iq_ax.plot(np.arange(len(arg_P)), arg_P, label="∠P")
+        self.iq_ax.plot(np.arange(len(P)), np.angle(P), label="∠P")
         self.iq_ax.plot(np.arange(len(samples)), (samples.real), label="real(s)")
         self.iq_ax.axvline(x=frame_start, color='red', label="frame start")
 
@@ -119,19 +99,20 @@ class SyncedQAM(App):
 
         p = np.polyfit(domain, y, 2)
         peak_bin = -p[1] / (2*p[0]) # vertex
-        coarse_offset = round((self.ofdm.K - self.ofdm.Kon) / 2 - peak_bin)
+        #coarse_offset = round((self.ofdm.K - self.ofdm.Kon) / 2 - peak_bin)
+        coarse_offset = ((self.ofdm.K - self.ofdm.Kon) / 2 - peak_bin)
 
         fine_domain = np.arange(peak_bin-n,peak_bin+n+1,.1)
         self.cfo_est_ax.plot(domain, y, label="fft")
         self.cfo_est_ax.plot(fine_domain, p[0]*fine_domain**2+p[1]*fine_domain+p[2], label="est")
         self.cfo_est_ax.axvline(x=peak_bin, color='red', label="vertex")
 
-        cfo_correction = np.exp(2.0j * np.pi * coarse_offset / self.ofdm.K * np.arange(len(data_frame)))
+        cfo_correction = np.exp(2.0j * np.pi * coarse_offset * np.arange(len(data_frame)) / self.ofdm.K)
         print("coarse offset: ", coarse_offset * fs, "todo: find unit")
 
         # fine CFO correction
-        fine_offset = arg_P[frame_start]/(np.pi * self.ofdm.K)
-        cfo_correction *= np.exp(2.0j * np.pi * fine_offset * np.arange(len(data_frame)))
+        fine_offset = np.angle(P[frame_start] * np.exp(-1.0j * np.pi * coarse_offset)) 
+        cfo_correction *= np.exp(2.0j * fine_offset * np.arange(len(data_frame)) / self.ofdm.K)
         print("fine offset: ", fine_offset * fs, "Hz")
 
         data_frame = data_frame * cfo_correction
@@ -150,8 +131,9 @@ class SyncedQAM(App):
         #frame_demod = frame_demod/np.max(np.abs(frame_demod))
         ##self.constellation_ax.scatter(frame_demod.real, frame_demod.imag)
 
-        self.frame_iq_ax.plot(np.arange(len(data_frame)) + self.ofdm.CP + self.ofdm.K, data_frame.real, label="real(s)")
-        self.frame_iq_ax.plot(np.arange(len(data_frame)) + self.ofdm.CP + self.ofdm.K, data_frame.imag, label="imag(s)")
+        self.frame_iq_ax.plot(np.arange(len(data_frame)) + self.ofdm.CP + 2*self.ofdm.K, data_frame.real, label="real(s)")
+        self.frame_iq_ax.plot(np.arange(len(data_frame)) + self.ofdm.CP + 2*self.ofdm.K, data_frame.imag, label="imag(s)")
+        self.frame_iq_ax.plot(np.arange(len(data_frame)) + self.ofdm.CP + 2*self.ofdm.K, np.angle(data_frame), label="θ(s)")
 
         self.draw_plots()
 
@@ -241,13 +223,13 @@ class SyncedQAM(App):
 
         return metric
 
-    def frame_start_inds_and_arg_p(self, samples):
+    def frame_start_inds_and_p(self, samples):
         metric, P, R = self.calc_metric(samples)
         sync = self.sync_from_metric(metric)
 
         start_inds = np.flatnonzero(sync)
 
-        return start_inds, np.angle(P)
+        return start_inds, P
  
 
     ##################### STRUCTURE #####################
@@ -288,7 +270,8 @@ class SyncedQAM(App):
 
         data_frames = []
         for ii in range(data_symbols):
-            data_frames.append(samples[i + (2+ii)*(K + CP) : i + (2+ii)*(K + CP) + K])
+            #data_frames.append(samples[i + (2+ii)*(K + CP) : i + (2+ii)*(K + CP) + K]) # remove CP
+            data_frames.append(samples[i + (2+ii)*(K + CP) - CP : i + (2+ii)*(K + CP) + K]) # keep CP
 
         full_data = samples[i + (2)*(K + CP) : i + (1+data_symbols)*(K + CP) + K]
 

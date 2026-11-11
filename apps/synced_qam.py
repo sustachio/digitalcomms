@@ -70,58 +70,28 @@ class SyncedQAM(App):
         self.stop_tx()
 
         # calculate frame start
-        #self.iq_ax.plot(np.arange(len(samples)), (samples.imag))
-
         frame_start_inds, P = self.frame_start_inds_and_p(samples)
         frame_start = frame_start_inds[1]
 
-
+        # extract parts
         full_frame, cox_preamble, cfo_preamble, data_frames, full_data = self.extract_frame_parts(samples, frame_start, 10)
         data_frame = np.hstack(data_frames)
-        #data_frame = full_data
 
         self.iq_ax.plot(np.arange(len(P)), np.angle(P), label="∠P")
         self.iq_ax.plot(np.arange(len(samples)), (samples.real), label="real(s)")
         self.iq_ax.axvline(x=frame_start, color='red', label="frame start")
 
         self.frame_iq_ax.plot(np.arange(len(full_frame)), np.abs(full_frame), label="|s|")
-
         self.frame_angle_ax.plot(np.arange(len(data_frame)), np.angle(data_frame), label="s_θ initial")
 
-        # coarse CFO correction
-        fft_mag = np.abs(np.fft.fft(cfo_preamble))
-        peak_bin = np.argmax(fft_mag)
-        n = 5 # points on either side
-
-        domain = np.arange(peak_bin-n, peak_bin+n+1)
-        y = fft_mag[domain]
-        y /= np.max(y)
-
-        p = np.polyfit(domain, y, 2)
-        peak_bin = -p[1] / (2*p[0]) # vertex
-        #coarse_offset = round((self.ofdm.K - self.ofdm.Kon) / 2 - peak_bin)
-        coarse_offset = ((self.ofdm.K - self.ofdm.Kon) / 2 - peak_bin)
-
-        fine_domain = np.arange(peak_bin-n,peak_bin+n+1,.1)
-        self.cfo_est_ax.plot(domain, y, label="fft")
-        self.cfo_est_ax.plot(fine_domain, p[0]*fine_domain**2+p[1]*fine_domain+p[2], label="est")
-        self.cfo_est_ax.axvline(x=peak_bin, color='red', label="vertex")
-
-        cfo_correction = np.exp(2.0j * np.pi * coarse_offset * np.arange(len(data_frame)) / self.ofdm.K)
-        print("coarse offset: ", coarse_offset * fs, "todo: find unit")
-
-        # fine CFO correction
-        fine_offset = np.angle(P[frame_start] * np.exp(-1.0j * np.pi * coarse_offset)) 
-        cfo_correction *= np.exp(2.0j * fine_offset * np.arange(len(data_frame)) / self.ofdm.K)
-        print("fine offset: ", fine_offset * fs, "Hz")
-
-        data_frame = data_frame * cfo_correction
+        # cfo correction
+        n = 5
+        data_frame, coarse_offset, peak_bin, cfo_correction = self.correct_cfo(data_frame, P[frame_start], cfo_preamble, n)
 
         # rough phase correction
         phase = np.average(data_frame)
         phase = phase / (np.abs(phase) + 1e-9)
         data_frame = data_frame * np.conj(phase)
-
 
         self.frame_angle_ax.plot(np.arange(len(data_frame)), np.angle(cfo_correction)/ (np.pi), label="θ estimate")
         self.frame_angle_ax.plot(np.arange(len(data_frame)), np.angle(data_frame), label="s_θ corrected")
@@ -231,6 +201,38 @@ class SyncedQAM(App):
 
         return start_inds, P
  
+    # coarse/fine CFO correction
+    def correct_cfo(self, data_frame, P_frame_start, cfo_preamble, n=5): # n points to each side
+        fft_mag = np.abs(np.fft.fft(cfo_preamble))
+        peak_bin = np.argmax(fft_mag)
+
+        domain = np.arange(peak_bin-n, peak_bin+n+1)
+        y = fft_mag[domain]
+        y /= np.max(y)
+
+        p = np.polyfit(domain, y, 2)
+        peak_bin = -p[1] / (2*p[0]) # vertex
+    
+        coarse_offset = ((self.ofdm.K - self.ofdm.Kon) / 2 - peak_bin)
+
+        cfo_correction = np.exp(2.0j * np.pi * coarse_offset * np.arange(len(data_frame)) / self.ofdm.K)
+        print("coarse offset: ", coarse_offset * fs / self.ofdm.K)
+
+        # fine cfo
+        fine_offset = np.angle(P_frame_start * np.exp(-1.0j * np.pi * coarse_offset)) 
+        cfo_correction *= np.exp(2.0j * fine_offset * np.arange(len(data_frame)) / self.ofdm.K)
+        print("fine offset: ", fine_offset * fs / self.ofdm.K, "Hz")
+
+        # plot
+        fine_domain = np.arange(peak_bin-n,peak_bin+n+n,.1)
+        self.cfo_est_ax.plot(domain, y, label="fft")
+        self.cfo_est_ax.plot(fine_domain, p[0]*fine_domain**2+p[1]*fine_domain+p[2], label="est")
+        self.cfo_est_ax.axvline(x=peak_bin, color='red', label="vertex")
+
+        data_frame *= cfo_correction
+
+        return data_frame, coarse_offset, peak_bin, cfo_correction
+
 
     ##################### STRUCTURE #####################
 

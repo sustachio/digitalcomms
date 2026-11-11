@@ -9,6 +9,7 @@ from apps.sync1  import Sync1
 from apps.framesync  import FrameSync
 from apps.schmidl_cox  import SchmidlCox
 from apps.synced_qam  import SyncedQAM
+from apps.ofdm_channel1 import OFDMChannelEst1
 
 sample_rate = 1e6 # Hz
 center_freq = 915e6 # Hz
@@ -153,5 +154,8 @@ gui.comms_control.add_app(cox)
 qam = SyncedQAM(sdrman, sdrplusman, gui)
 gui.comms_control.add_app(qam)
 
-qam.start()
+ofdm1 = OFDMChannelEst1(sdrman, sdrplusman, gui)
+gui.comms_control.add_app(ofdm1)
+
+ofdm1.start()
 gui.root.mainloop()

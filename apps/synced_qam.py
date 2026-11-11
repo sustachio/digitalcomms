@@ -88,11 +88,6 @@ class SyncedQAM(App):
         n = 5
         data_frame, coarse_offset, peak_bin, cfo_correction = self.correct_cfo(data_frame, P[frame_start], cfo_preamble, n)
 
-        # rough phase correction
-        phase = np.average(data_frame)
-        phase = phase / (np.abs(phase) + 1e-9)
-        data_frame = data_frame * np.conj(phase)
-
         self.frame_angle_ax.plot(np.arange(len(data_frame)), np.angle(cfo_correction)/ (np.pi), label="θ estimate")
         self.frame_angle_ax.plot(np.arange(len(data_frame)), np.angle(data_frame), label="s_θ corrected")
 
@@ -223,13 +218,19 @@ class SyncedQAM(App):
         cfo_correction *= np.exp(2.0j * fine_offset * np.arange(len(data_frame)) / self.ofdm.K)
         print("fine offset: ", fine_offset * fs / self.ofdm.K, "Hz")
 
+        data_frame *= cfo_correction
+
+        # rough phase correction
+        phase = np.average(data_frame)
+        phase = phase / (np.abs(phase) + 1e-9)
+        data_frame = data_frame * np.conj(phase)
+
         # plot
         fine_domain = np.arange(peak_bin-n,peak_bin+n+n,.1)
         self.cfo_est_ax.plot(domain, y, label="fft")
         self.cfo_est_ax.plot(fine_domain, p[0]*fine_domain**2+p[1]*fine_domain+p[2], label="est")
         self.cfo_est_ax.axvline(x=peak_bin, color='red', label="vertex")
 
-        data_frame *= cfo_correction
 
         return data_frame, coarse_offset, peak_bin, cfo_correction
 

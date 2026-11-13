@@ -8,6 +8,8 @@ from apps.app_parent import *
 
 fs = 1e6
 
+norm99 = lambda v : v / (np.percentile(np.abs(v), 99) + 1e-9)
+
 class OFDM:
     def __init__(self, K, Kon, CP): # carriers, carries enabled, cyclic prefix
         self.K = K
@@ -31,7 +33,7 @@ class OFDM:
 
         offset = int((self.K-self.Kon)/2)
         freqs = np.fft.fft(samples)
-        #freqs = freqs[offset : offset + self.Kon]
+        freqs = freqs[offset : offset + self.Kon]
         #freqs = np.fft.fftshift(freqs)
 
         return freqs
@@ -53,13 +55,17 @@ class OFDMChannelEst1(App):
 
         self.iq_ax            = self.new_plot("rx", "Raw I/Q", ybounds=(-2, 2))
         self.frame_iq_ax      = self.new_plot("rx", "Frame I/Q", ybounds=(-np.pi, np.pi))
-        self.constellation_ax = self.new_plot("rx", "I/Q Constellation", ybounds=(-2, 2))
+        self.constellation_ax = self.new_plot("rx", "I/Q Constellation")
+        self.estimation_ax   = self.new_plot("rx", "Channel Estimation", ybounds=(-np.pi, np.pi))
 
         self.tx_frame_iq_ax   = self.new_plot("tx", "Frame I/Q", ybounds=(-3, 3))
         self.tx_fft_ax        = self.new_plot("tx", "FFT", ybounds=(-30, 0))
 
         self.ofdm = OFDM(1024, 600, 128)
         #self.ofdm = OFDM(100, 40, 20)
+
+        self.Nsymbols = 2
+        self.pilots = self.ofdm.random_carriers_4psk()
 
         self.saved_cox_preamble = []
 
@@ -75,10 +81,9 @@ class OFDMChannelEst1(App):
         frame_start = frame_start_inds[1]
 
         # extract parts
-        full_frame, cox_preamble, cfo_preamble, data_frames, full_data = self.extract_frame_parts(samples, frame_start, 2)
+        full_frame, cox_preamble, cfo_preamble, data_frames, full_data = self.extract_frame_parts(samples, frame_start, self.Nsymbols)
         data_frame = np.hstack(data_frames)
 
-        self.iq_ax.plot(np.arange(len(P)), np.angle(P), label="∠P")
         self.iq_ax.plot(np.arange(len(samples)), (samples.real), label="real(s)")
         self.iq_ax.axvline(x=frame_start, color='red', label="frame start")
 
@@ -88,20 +93,35 @@ class OFDMChannelEst1(App):
         n = 5
         data_frame, coarse_offset, peak_bin, cfo_correction = self.correct_cfo(data_frame, P[frame_start], cfo_preamble, n)
 
-        # demodulate frame
-        pilots = self.ofdm.demodulate(data_frame[self.ofdm.CP : self.ofdm.CP + self.ofdm.K])
-        pilots = pilots/np.max(np.abs(pilots))
+        # measure pilots
+        measured_pilots = self.ofdm.demodulate(data_frame[self.ofdm.CP : self.ofdm.CP + self.ofdm.K])
+        #measured_pilots = norm99(measured_pilots)
 
         data = self.ofdm.demodulate(data_frame[-self.ofdm.K:])
-        for i in range(self.ofdm.Kon):
-            data[i] *= np.conj(pilots[i])
-        data = data/np.max(np.abs(data))
-        self.constellation_ax.scatter(pilots.real, pilots.imag)
-        self.constellation_ax.scatter(data.real, data.imag)
+        estimation = self.pilots / measured_pilots
+        self.estimation_ax.plot(np.arange(len(estimation)), np.angle(estimation), label="∠est")
+        self.estimation_ax.plot(np.arange(len(estimation)), norm99(np.abs(estimation)), label="|est|")
 
-        self.frame_iq_ax.plot(np.arange(len(data_frame)) + self.ofdm.CP + 2*self.ofdm.K, data_frame.real, label="real(s)")
-        self.frame_iq_ax.plot(np.arange(len(data_frame)) + self.ofdm.CP + 2*self.ofdm.K, data_frame.imag, label="imag(s)")
-        self.frame_iq_ax.plot(np.arange(len(data_frame)) + self.ofdm.CP + 2*self.ofdm.K, np.angle(data_frame), label="θ(s)")
+        # correct next block
+        for i in range(self.ofdm.Kon):
+            data[i] *= (estimation[i])
+        #data = norm99(data)
+        self.constellation_ax.scatter(estimation.real, estimation.imag, label="est")
+        self.constellation_ax.scatter(data.real, data.imag, label="data")
+
+
+        graph_sample = samples[frame_start - self.ofdm.K: frame_start + (2+self.Nsymbols)*(self.ofdm.K + self.ofdm.CP)]
+        frame_graph_x = np.arange(-self.ofdm.K, (2+self.Nsymbols)*(self.ofdm.K + self.ofdm.CP))
+        self.frame_iq_ax.plot(frame_graph_x, graph_sample.real, label="real(s)")
+        self.frame_iq_ax.plot(np.arange(self.Nsymbols * (self.ofdm.CP + self.ofdm.K)) + self.ofdm.K*2 + self.ofdm.CP, data_frame.real, label="real(corrected s)")
+        #self.frame_iq_ax.plot(frame_graph_x, graph_sample.imag, label="imag(s)")
+        #self.frame_iq_ax.plot(np.arange(len(data_frame)) + self.ofdm.CP + 2*self.ofdm.K, np.angle(data_frame), label="θ(s)")
+
+        self.frame_iq_ax.axvline(x=0, color='black') # prefix K start
+        for i in range(self.Nsymbols+2):
+            self.frame_iq_ax.axvline(x=i*(self.ofdm.K+self.ofdm.CP)+self.ofdm.K, color='black') # CP start
+
+        #self.frame_iq_ax.plot(np.arange(len(data_frame)) + self.ofdm.CP + 2*self.ofdm.K, data_frame.real, label="real(s)")
 
         self.draw_plots()
 
@@ -117,10 +137,9 @@ class OFDMChannelEst1(App):
 
         t = np.arange(self.sdrplusman.rx_buffer_size)/fs
         samples = self.sdrplusman.sdr.rx()
-        samples = samples * np.exp(-2.0j*np.pi*3000*t)
 
         # normalize
-        samples /= (np.percentile(np.abs(samples), 99) + 1e-9)
+        samples = norm99(samples)
 
         return samples
 
@@ -128,7 +147,7 @@ class OFDMChannelEst1(App):
         self.sdrman.rebuild_tx_buffer()
         
         samples = self.preamble()
-        samples = np.hstack([samples, self.ofdm.modulate(np.repeat(1, self.ofdm.Kon)), self.ofdm.modulate(self.ofdm.random_carriers_4psk())])
+        samples = np.hstack([samples, self.ofdm.modulate(self.pilots), self.ofdm.modulate(self.ofdm.random_carriers_4psk())])
 
         txnullpad = 10000
         samples = np.pad(samples, txnullpad)
@@ -153,7 +172,6 @@ class OFDMChannelEst1(App):
         fft_f, psd_dB = self.fft_graph(samples, fs)
         self.tx_fft_ax.plot(fft_f, psd_dB)
 
-        samples *= np.exp(2.0j*np.pi*3000*t) # to allow for DC QAM signals
         samples *= 2**13
         t = np.arange(len(samples))/fs
         self.sdrman.cyclic_tx(samples)

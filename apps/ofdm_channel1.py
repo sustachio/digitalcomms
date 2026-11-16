@@ -6,21 +6,28 @@ from scipy import signal, fft
 import time
 from apps.app_parent import *
 
+import time
+
 fs = 1e6
 
 norm99 = lambda v : v / (np.percentile(np.abs(v), 99) + 1e-9)
 
 class OFDM:
-    def __init__(self, K, Kon, CP): # carriers, carries enabled, cyclic prefix
+    def __init__(self, K, Kon, CP, pad_K=50): # carriers, carries enabled, cyclic prefix, turned off carriers at high ends of fft
         self.K = K
         self.Kon = Kon
         self.CP = CP
+        self.pad_K = pad_K
+
+        assert K % 2 == 0
+        assert Kon % 2 == 0
 
     def modulate(self, qam): # center of qam is 0hz
         assert len(qam) == self.Kon
 
-        offset = int((self.K-self.Kon)/2)
-        freqs = np.pad(qam, (offset + (1 if (self.K-self.Kon)%2==1 else 0), offset))
+        offset = int((self.K-self.Kon)/2) - self.pad_K
+        freqs = np.pad(qam, offset)
+        freqs = np.hstack([freqs[:len(freqs)//2], np.zeros(self.pad_K*2), freqs[len(freqs)//2:]])
         signal = np.fft.ifft(freqs) * np.sqrt(self.K)
         
         if self.CP > 0:
@@ -31,10 +38,11 @@ class OFDM:
     def demodulate(self, samples):
         assert(len(samples) == self.K)
 
-        offset = int((self.K-self.Kon)/2)
+        offset = int((self.K-self.Kon)/2) - self.pad_K
         freqs = np.fft.fft(samples)
-        freqs = freqs[offset : offset + self.Kon]
-        #freqs = np.fft.fftshift(freqs)
+        freqs = freqs[offset : -offset]
+        freqs = np.hstack([freqs[: self.Kon//2], freqs[-self.Kon//2 :]])
+        freqs = freqs[:self.Kon]
 
         return freqs
 
@@ -42,6 +50,12 @@ class OFDM:
         qam = np.array([1+1j, 1-1j, -1+1j, -1-1j]) * np.sqrt(2)
         return np.random.choice(qam, size=self.Kon, replace=True)
 
+    def random_carriers_nqam(self, log_n): # logn=1 -> QAM4, logn=2 -> QAM16, logn=3 -> QAM64
+        qam = []
+        for i in range(log_n**2):
+            for j in range(log_n**2):
+                qam.append((i/(log_n**2) - 0.5) * 2 + 1.0j*(j/(log_n**2) - 0.5) * 2)
+        return np.random.choice(qam, size=self.Kon, replace=True)
 
 
 
@@ -64,7 +78,7 @@ class OFDMChannelEst1(App):
         self.ofdm = OFDM(1024, 600, 128)
         #self.ofdm = OFDM(100, 40, 20)
 
-        self.Nsymbols = 2
+        self.Nsymbols = 6
         self.pilots = self.ofdm.random_carriers_4psk()
 
         self.saved_cox_preamble = []
@@ -73,18 +87,27 @@ class OFDMChannelEst1(App):
         self.reset_plots()
 
         self.tx()
+        t1 = time.time()
         samples = self.rx()
+        print("RX TIME:", time.time()-t1)
         self.stop_tx()
+        self.iq_ax.plot(np.arange(len(samples)), (samples.real), label="real(s)")
 
+
+        t2 = time.time()
         # calculate frame start
         frame_start_inds, P = self.frame_start_inds_and_p(samples)
-        frame_start = frame_start_inds[1]
+        try:
+            frame_start = frame_start_inds[1]
+        except IndexError:
+            print("nothing found")
+            self.draw_plots()
+            return
 
         # extract parts
         full_frame, cox_preamble, cfo_preamble, data_frames, full_data = self.extract_frame_parts(samples, frame_start, self.Nsymbols)
         data_frame = np.hstack(data_frames)
 
-        self.iq_ax.plot(np.arange(len(samples)), (samples.real), label="real(s)")
         self.iq_ax.axvline(x=frame_start, color='red', label="frame start")
 
         self.frame_iq_ax.plot(np.arange(len(full_frame)), np.abs(full_frame), label="|s|")
@@ -99,6 +122,9 @@ class OFDMChannelEst1(App):
 
         data = self.ofdm.demodulate(data_frame[-self.ofdm.K:])
         estimation = self.pilots / measured_pilots
+
+        print("PROCESS TIME:", time.time()-t2)
+
         self.estimation_ax.plot(np.arange(len(estimation)), np.angle(estimation), label="∠est")
         self.estimation_ax.plot(np.arange(len(estimation)), norm99(np.abs(estimation)), label="|est|")
 
@@ -107,7 +133,7 @@ class OFDMChannelEst1(App):
             data[i] *= (estimation[i])
         #data = norm99(data)
         self.constellation_ax.scatter(estimation.real, estimation.imag, label="est")
-        self.constellation_ax.scatter(data.real, data.imag, label="data")
+        self.constellation_ax.scatter(data.real, data.imag, label="data", c=np.arange(len(data)), cmap='viridis')
 
 
         graph_sample = samples[frame_start - self.ofdm.K: frame_start + (2+self.Nsymbols)*(self.ofdm.K + self.ofdm.CP)]
@@ -147,7 +173,9 @@ class OFDMChannelEst1(App):
         self.sdrman.rebuild_tx_buffer()
         
         samples = self.preamble()
-        samples = np.hstack([samples, self.ofdm.modulate(self.pilots), self.ofdm.modulate(self.ofdm.random_carriers_4psk())])
+        samples = np.hstack([samples, self.ofdm.modulate(self.pilots)])
+        for i in range(self.Nsymbols):
+            samples = np.hstack([samples, self.ofdm.modulate(self.ofdm.random_carriers_4psk())])
 
         txnullpad = 10000
         samples = np.pad(samples, txnullpad)
@@ -200,11 +228,11 @@ class OFDMChannelEst1(App):
 
         metric = ((diff[:-1] * diff[1:]) <= 0) * (metric[1:-1] > 0.75) * 1 # zero crossings in metric
 
-        ignore_window = np.ones(self.ofdm.CP + self.ofdm.K + 2000)
+        ignore_window = np.ones(self.ofdm.CP + self.ofdm.K*(self.Nsymbols+2))
         ignore_window[-1] = 0
 
         ignore = np.convolve(metric, ignore_window, mode="valid")
-        ignore = np.pad(ignore, (self.ofdm.CP + self.ofdm.K + 2000, 0), mode="constant", constant_values=1)[:-1]
+        ignore = np.pad(ignore, (self.ofdm.CP + self.ofdm.K*(self.Nsymbols+2), 0), mode="constant", constant_values=1)[:-1]
         metric = metric * (ignore == 0)
 
         return metric
@@ -229,7 +257,7 @@ class OFDMChannelEst1(App):
         p = np.polyfit(domain, y, 2)
         peak_bin = -p[1] / (2*p[0]) # vertex
     
-        coarse_offset = ((self.ofdm.K - self.ofdm.Kon) / 2 - peak_bin)
+        coarse_offset = ((self.ofdm.K - self.ofdm.Kon) / 2 - self.ofdm.pad_K - peak_bin)
 
         cfo_correction = np.exp(2.0j * np.pi * coarse_offset * np.arange(len(data_frame)) / self.ofdm.K)
         print("coarse offset: ", coarse_offset * fs / self.ofdm.K)
